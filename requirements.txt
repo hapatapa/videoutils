@@ -1,0 +1,6 @@
+flet==0.80.2
+flet-video==0.80.2
+httpcore>=1.0.8
+httpx>=0.28.1
+
+

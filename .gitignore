@@ -1,0 +1,31 @@
+# Python stuff
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+
+# App-specific
+build/
+dist/
+build-work/
+*.spec
+wheels/
+
+# Logs and Data
+*.log
+docker-data/
+
+# IDE stuff
+.idea/
+.vscode/
+
+# Project assets and videos (if you don't want to upload them)
+# assets/
+*.mp4
+*.mkv
+*.mov
+*.png
+*.jpg

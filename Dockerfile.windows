@@ -1,0 +1,39 @@
+# --- Windows Build Container ---
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV WINEPREFIX=/root/.wine
+ENV WINEARCH=win64
+
+# Install Wine and unzip
+RUN dpkg --add-architecture i386 && \
+    apt-get update && apt-get install -y \
+    wine64 \
+    wine32 \
+    curl \
+    unzip \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 1. Initialize Wine
+RUN winecfg -v win10
+
+# 2. Download Embeddable Windows Python 3.11 (No installer needed!)
+WORKDIR /python-windows
+RUN curl -L https://www.python.org/ftp/python/3.11.8/python-3.11.8-embed-amd64.zip -o py.zip && \
+    unzip py.zip && \
+    rm py.zip
+
+# 3. Add pip to the embeddable package
+RUN curl -L https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
+    wine64 python.exe get-pip.py
+
+# 4. Enable site-packages in the embeddable build
+RUN sed -i 's/#import site/import site/' python311._pth
+
+# 5. Copy pre-downloaded Windows wheels and install them (No-Network Pip!)
+COPY wheels /wheels
+RUN wine64 python.exe -m pip install --no-index --find-links=/wheels pyinstaller pillow flet==0.80.2 flet-video==0.80.2
+
+WORKDIR /src
+ENTRYPOINT ["wine64", "/python-windows/Scripts/pyinstaller.exe"]

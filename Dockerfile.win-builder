@@ -1,0 +1,30 @@
+# Use a base with Wine and Python
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Wine and Python 3.11
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    wine \
+    && rm -rf /var/lib/apt/lists/*
+
+# We need to install the WINDOWS version of Python under Wine
+# because PyInstaller for Windows requires the Windows Python interpreter.
+WORKDIR /build
+RUN curl -L https://www.python.org/ftp/python/3.11.4/python-3.11.4-amd64.exe -o py.exe \
+    && wine py.exe /quiet InstallAllUsers=1 PrependPath=1 \
+    && rm py.exe
+
+# Upgrade pip and install requirements in the Wine environment
+# Note: 'wine python -m pip' is a bit slow
+RUN wine python -m pip install --upgrade pip \
+    && wine python -m pip install pyinstaller pillow flet==0.80.2 flet-video==0.80.2
+
+# Set the entrypoint to run PyInstaller
+ENTRYPOINT ["wine", "pyinstaller"]

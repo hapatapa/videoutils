@@ -1,0 +1,14 @@
+.venv/
+build/
+dist/
+build-work/
+*.spec
+*.log
+*.mp4
+*.mkv
+*.mov
+*.png
+*.jpg
+.git/
+.agent/
+__pycache__/
