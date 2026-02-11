@@ -31,6 +31,11 @@ jobs:
             --add-data "gui.py:." \
             --collect-all flet \
             --collect-all flet_video \
+            --hidden-import multiprocessing.resource_tracker \
+            --hidden-import multiprocessing.pool \
+            --hidden-import uvicorn.logging \
+            --hidden-import uvicorn.loops \
+            --hidden-import uvicorn.protocols \
             --noupx --clean \
             --name "ExpressiveVideoCompressor-Linux" \
             launcher.py
@@ -60,6 +65,11 @@ jobs:
             --add-data "gui.py;." `
             --collect-all flet `
             --collect-all flet_video `
+            --hidden-import multiprocessing.resource_tracker `
+            --hidden-import multiprocessing.pool `
+            --hidden-import uvicorn.logging `
+            --hidden-import uvicorn.loops `
+            --hidden-import uvicorn.protocols `
             --noupx --clean `
             --name "ExpressiveVideoCompressor-Windows" `
             launcher.py
