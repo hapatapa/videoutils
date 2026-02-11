@@ -6,11 +6,11 @@ import base64
 import subprocess
 import tempfile
 import asyncio
+import flet as ft
+from flet_video import Video, VideoMedia, PlaylistMode
 import compressor_logic as logic
 
-async def main(page):
-    import flet as ft
-    from flet_video import Video, VideoMedia, PlaylistMode
+async def main(page: ft.Page):
     # Set assets_dir to the assets folder directly
     page.assets_dir = os.path.join(os.path.dirname(__file__), "assets")
     

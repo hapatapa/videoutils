@@ -23,23 +23,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
-      - name: Build with PyInstaller
+      - name: Build Linux (Standalone)
         run: |
           pyinstaller --onefile --windowed --noconfirm \
             --add-data "assets:assets" \
             --add-data "compressor_logic.py:." \
             --add-data "gui.py:." \
-            --collect-all flet \
-            --collect-all flet_video \
-            --hidden-import multiprocessing.resource_tracker \
-            --hidden-import multiprocessing.pool \
-            --hidden-import uvicorn.logging \
-            --hidden-import uvicorn.loops \
-            --hidden-import uvicorn.protocols \
-            --noupx --clean \
             --name "ExpressiveVideoCompressor-Linux" \
             launcher.py
-      - name: Upload Artifact
+      - name: Upload Linux Artifact
         uses: actions/upload-artifact@v4
         with:
           name: video-compressor-linux
@@ -49,53 +41,47 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install dependencies
+
+      - name: Install Flet and Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller
-      - name: Build with PyInstaller
+          pip install -r requirements.txt
+          pip install flet
+
+      - name: Build Windows (Native Flutter App)
+        # Using 'flet build windows' produces a high-performance native app
+        # instead of a buggy PyInstaller script bundle.
         run: |
-          pyinstaller --onefile --windowed --noconfirm `
-            --add-data "assets;assets" `
-            --add-data "compressor_logic.py;." `
-            --add-data "gui.py;." `
-            --collect-all flet `
-            --collect-all flet_video `
-            --hidden-import multiprocessing.resource_tracker `
-            --hidden-import multiprocessing.pool `
-            --hidden-import uvicorn.logging `
-            --hidden-import uvicorn.loops `
-            --hidden-import uvicorn.protocols `
-            --noupx --clean `
-            --name "ExpressiveVideoCompressor-Windows" `
-            launcher.py
-      - name: Upload Artifact
+          flet build windows --product "Expressive Video Compressor" --description "Professional Video Compression Tool"
+
+      - name: Archive Windows Build
+        # Windows builds are folders; we zip them for easy distribution.
+        run: |
+          Compress-Archive -Path build/windows/* -DestinationPath ExpressiveVideoCompressor-Windows-Portable.zip
+
+      - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
           name: video-compressor-windows
-          path: dist/ExpressiveVideoCompressor-Windows.exe
+          path: ExpressiveVideoCompressor-Windows-Portable.zip
 
   create-release:
     needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       
-      - name: Download Linux Artifact
+      - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: video-compressor-linux
           path: release-assets
-
-      - name: Download Windows Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: video-compressor-windows
-          path: release-assets
+          merge-multiple: true
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -106,6 +92,6 @@ jobs:
           prerelease: ${{ github.ref_name != 'main' && github.ref_type != 'tag' }}
           files: |
             release-assets/ExpressiveVideoCompressor-Linux
-            release-assets/ExpressiveVideoCompressor-Windows.exe
+            release-assets/ExpressiveVideoCompressor-Windows-Portable.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
