@@ -29,6 +29,9 @@ jobs:
             --add-data "assets:assets" \
             --add-data "compressor_logic.py:." \
             --add-data "gui.py:." \
+            --collect-all flet \
+            --collect-all flet_video \
+            --noupx --clean \
             --name "ExpressiveVideoCompressor-Linux" \
             launcher.py
       - name: Upload Artifact
@@ -55,6 +58,9 @@ jobs:
             --add-data "assets;assets" `
             --add-data "compressor_logic.py;." `
             --add-data "gui.py;." `
+            --collect-all flet `
+            --collect-all flet_video `
+            --noupx --clean `
             --name "ExpressiveVideoCompressor-Windows" `
             launcher.py
       - name: Upload Artifact
