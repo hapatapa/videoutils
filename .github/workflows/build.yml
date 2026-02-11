@@ -59,7 +59,7 @@ jobs:
         env:
           PYTHONUTF8: 1
         run: |
-          flet build windows --product "Expressive Video Compressor" --description "Professional Video Compression Tool"
+          echo "y" | flet build windows --product "Expressive Video Compressor" --description "Professional Video Compression Tool"
 
       - name: Archive Windows Build
         # Windows builds are folders; we zip them for easy distribution.
