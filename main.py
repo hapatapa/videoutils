@@ -1,22 +1,32 @@
+import multiprocessing
 import sys
 import os
-import flet as ft
-import gui
 
-def main():
+def start_app():
     """
     Official Entry Point for Expressive Video Compressor.
-    The Flet native build system handles process isolation on Windows,
-    removing the need for many manual PyInstaller hacks.
+    Using delayed imports ensures that child processes (worker threads/pids)
+    do not accidentally re-initialize the entire GUI, preventing fork bombs.
     """
+    # CRITICAL: Required for PyInstaller/bundled apps using multiprocessing
+    multiprocessing.freeze_support()
+
+    # Delayed imports to avoid import-time side effects in sub-processes
+    import flet as ft
+    import gui
+
     if "--cli" in sys.argv:
         gui.run_cli()
     else:
         # Standard Flet Launch
+        assets_path = os.path.join(os.path.dirname(__file__), "assets")
+        if not os.path.exists(assets_path):
+            assets_path = "assets" # Fallback
+            
         ft.app(
             target=gui.main,
-            assets_dir=os.path.join(os.path.dirname(__file__), "assets")
+            assets_dir=assets_path
         )
 
 if __name__ == "__main__":
-    main()
+    start_app()
