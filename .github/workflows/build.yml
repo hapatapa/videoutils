@@ -3,7 +3,12 @@ name: Build Binaries
 on:
   push:
     branches: [ "main", "experimental" ]
+    tags:
+      - 'v*'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-linux:
@@ -55,3 +60,34 @@ jobs:
         with:
           name: video-compressor-windows
           path: dist/ExpressiveVideoCompressor-Windows.exe
+
+  create-release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: video-compressor-linux
+          path: release-assets
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: video-compressor-windows
+          path: release-assets
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', github.run_number) }}
+          name: ${{ github.ref_type == 'tag' && format('Release {0}', github.ref_name) || format('Build {0}', github.run_number) }}
+          draft: false
+          prerelease: ${{ github.ref_name != 'main' && github.ref_type != 'tag' }}
+          files: |
+            release-assets/ExpressiveVideoCompressor-Linux
+            release-assets/ExpressiveVideoCompressor-Windows.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
