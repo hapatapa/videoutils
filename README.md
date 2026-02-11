@@ -22,3 +22,4 @@ Why is that?
 <img width="1266" height="709" alt="Screenshot 2025-12-30 153457" src="https://github.com/user-attachments/assets/dd41db8a-6262-444b-af07-5203330fc8ee" />
 <img width="1270" height="720" alt="Screenshot 2025-12-30 153932" src="https://github.com/user-attachments/assets/0c1ad6d7-8597-4840-ad0f-458edf62b225" />
 <img width="1257" height="712" alt="Screenshot 2025-12-30 154103" src="https://github.com/user-attachments/assets/5f882fb5-c3e0-4dfe-b3e1-36f7dd05b717" />
+<img width="200" height="180" alt="Screenshot 2026-02-09 215411" src="https://github.com/user-attachments/assets/6705f5a3-2630-4028-8824-a91f8f778e72" />
