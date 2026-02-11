@@ -22,16 +22,17 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev libsecret-1-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libwebkit2gtk-4.1-dev libappindicator3-dev libsecret-1-dev mpv libmpv-dev
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install flet pyinstaller
       - name: Build Linux (Native Professional)
         run: |
-          echo "y" | flet build linux --product "Expressive Video Compressor"
+          yes | flet build linux --product "Expressive Video Compressor" --verbose
       - name: Build Linux (Single Executable)
+        # Removed --onefile as it's often default or problematic in some flet versions
         run: |
-          flet pack main.py --onefile --windowed --name "ExpressiveVideoCompressor-Linux-Single"
+          flet pack main.py --windowed --name "ExpressiveVideoCompressor-Linux-Single"
       - name: Archive Linux Native
         run: |
           tar -czf ExpressiveVideoCompressor-Linux-Native.tar.gz -C build/linux .
@@ -44,7 +45,7 @@ jobs:
             dist/ExpressiveVideoCompressor-Linux-Single
 
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -60,11 +61,11 @@ jobs:
         env:
           PYTHONUTF8: 1
         run: |
-          echo "y" | flet build windows --product "Expressive Video Compressor"
+          Write-Output "y" | flet build windows --product "Expressive Video Compressor" --verbose
       - name: Build Windows (Single Executable)
-        # This creates the requested single .exe file using the optimized launcher
+        # Removed --onefile as it's default for flet pack and was triggering argument errors
         run: |
-          flet pack main.py --onefile --windowed --name "ExpressiveVideoCompressor-Windows-Single"
+          flet pack main.py --windowed --name "ExpressiveVideoCompressor-Windows-Single"
       - name: Archive Windows Native
         run: |
           Compress-Archive -Path build/windows/* -DestinationPath ExpressiveVideoCompressor-Windows-Portable.zip
