@@ -1,5 +1,4 @@
 import sys
-import multiprocessing
 import os
 import threading
 import time
@@ -7,10 +6,6 @@ import base64
 import subprocess
 import tempfile
 import asyncio
-
-# This MUST be as early as possible on Windows to prevent fork bombs
-multiprocessing.freeze_support()
-
 import flet as ft
 from flet_video import Video, VideoMedia, PlaylistMode
 import compressor_logic as logic
@@ -2757,9 +2752,4 @@ def run_cli():
     else:
         print("\n❌ FAILED: Operation could not be completed.")
 
-if __name__ == "__main__":
-    if "--cli" in sys.argv:
-        run_cli()
-    else:
-        # Newer Flet version entry point
-        ft.app(target=main)
+# This file is now imported as a module by launcher.py to prevent fork bombs on Windows

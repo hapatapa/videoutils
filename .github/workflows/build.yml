@@ -28,8 +28,9 @@ jobs:
           pyinstaller --onefile --windowed --noconfirm \
             --add-data "assets:assets" \
             --add-data "compressor_logic.py:." \
+            --add-data "gui.py:." \
             --name "ExpressiveVideoCompressor-Linux" \
-            gui.py
+            launcher.py
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -53,8 +54,9 @@ jobs:
           pyinstaller --onefile --windowed --noconfirm `
             --add-data "assets;assets" `
             --add-data "compressor_logic.py;." `
+            --add-data "gui.py;." `
             --name "ExpressiveVideoCompressor-Windows" `
-            gui.py
+            launcher.py
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:

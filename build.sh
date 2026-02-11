@@ -19,7 +19,7 @@ echo "🐧 Building LINUX binary..."
     --name "ExpressiveVideoCompressor-Linux" \
     --distpath ./dist \
     --workpath ./build-work \
-    gui.py
+    launcher.py
 
 # Move to final build folder
 mkdir -p build
@@ -37,7 +37,7 @@ then
         # 2. Run the build
         echo "🔨 Compiling Windows executable..."
         if docker run --rm -v "$(pwd):/src" flet-windows-builder \
-            "--onefile --windowed --noconfirm --add-data 'assets;assets' --add-data 'compressor_logic.py;.' --name 'ExpressiveVideoCompressor-Windows' --distpath ./dist --workpath ./build-work gui.py"
+            "--onefile --windowed --noconfirm --add-data 'assets;assets' --add-data 'compressor_logic.py;.' --add-data 'gui.py;.' --name 'ExpressiveVideoCompressor-Windows' --distpath ./dist --workpath ./build-work launcher.py"
         then
             mkdir -p build
             mv ./dist/ExpressiveVideoCompressor-Windows.exe ./build/
