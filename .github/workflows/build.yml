@@ -30,9 +30,8 @@ jobs:
         run: |
           yes | flet build linux --product "Expressive Video Compressor" --verbose
       - name: Build Linux (Single Executable)
-        # Removed --onefile as it's often default or problematic in some flet versions
         run: |
-          flet pack main.py --windowed --name "ExpressiveVideoCompressor-Linux-Single"
+          flet pack main.py --name "ExpressiveVideoCompressor-Linux-Single" --yes --verbose
       - name: Archive Linux Native
         run: |
           tar -czf ExpressiveVideoCompressor-Linux-Native.tar.gz -C build/linux .
@@ -63,9 +62,8 @@ jobs:
         run: |
           Write-Output "y" | flet build windows --product "Expressive Video Compressor" --verbose
       - name: Build Windows (Single Executable)
-        # Removed --onefile as it's default for flet pack and was triggering argument errors
         run: |
-          flet pack main.py --windowed --name "ExpressiveVideoCompressor-Windows-Single"
+          flet pack main.py --name "ExpressiveVideoCompressor-Windows-Single" --yes --verbose
       - name: Archive Windows Native
         run: |
           Compress-Archive -Path build/windows/* -DestinationPath ExpressiveVideoCompressor-Windows-Portable.zip
