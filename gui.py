@@ -1,16 +1,19 @@
-print("--- GUI.PY LOADING ---")
-import flet as ft
-from flet_video import Video, VideoMedia, PlaylistMode
-import compressor_logic as logic
-import threading
+import sys
+import multiprocessing
 import os
+import threading
 import time
 import base64
 import subprocess
 import tempfile
 import asyncio
-import sys
-import multiprocessing
+
+# This MUST be as early as possible on Windows to prevent fork bombs
+multiprocessing.freeze_support()
+
+import flet as ft
+from flet_video import Video, VideoMedia, PlaylistMode
+import compressor_logic as logic
 
 async def main(page: ft.Page):
     # Set assets_dir to the assets folder directly
@@ -2755,8 +2758,8 @@ def run_cli():
         print("\n❌ FAILED: Operation could not be completed.")
 
 if __name__ == "__main__":
-    multiprocessing.freeze_support()
     if "--cli" in sys.argv:
         run_cli()
     else:
-        ft.run(main, assets_dir=os.path.join(os.path.dirname(__file__), "assets"))
+        # Newer Flet version entry point
+        ft.app(target=main)
