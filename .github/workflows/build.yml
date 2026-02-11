@@ -25,10 +25,10 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev libsecret-1-dev
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install flet
+          pip install flet pyinstaller
       - name: Build Linux (Native Professional)
         run: |
-          flet build linux --product "Expressive Video Compressor"
+          echo "y" | flet build linux --product "Expressive Video Compressor"
       - name: Build Linux (Single Executable)
         run: |
           flet pack main.py --onefile --windowed --name "ExpressiveVideoCompressor-Linux-Single"
@@ -55,7 +55,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install flet
+          pip install flet pyinstaller
       - name: Build Windows (Native Professional)
         env:
           PYTHONUTF8: 1
