@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import asyncio
 import sys
+import multiprocessing
 
 async def main(page: ft.Page):
     # Set assets_dir to the assets folder directly
@@ -2754,6 +2755,7 @@ def run_cli():
         print("\n❌ FAILED: Operation could not be completed.")
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     if "--cli" in sys.argv:
         run_cli()
     else:
