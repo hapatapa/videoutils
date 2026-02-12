@@ -23,3 +23,12 @@ Why is that?
 <img width="1270" height="720" alt="Screenshot 2025-12-30 153932" src="https://github.com/user-attachments/assets/0c1ad6d7-8597-4840-ad0f-458edf62b225" />
 <img width="1257" height="712" alt="Screenshot 2025-12-30 154103" src="https://github.com/user-attachments/assets/5f882fb5-c3e0-4dfe-b3e1-36f7dd05b717" />
 <img width="200" height="180" alt="Screenshot 2026-02-09 215411" src="https://github.com/user-attachments/assets/6705f5a3-2630-4028-8824-a91f8f778e72" />
+
+
+https://github.com/user-attachments/assets/4c6a5092-f5b1-49b6-9c32-36256bd8d3cb
+
+
+
+https://github.com/user-attachments/assets/4978ebcd-8820-4a7f-928e-de78567edbe4
+
+[Untitled(1).wav](https://github.com/user-attachments/files/25248222/Untitled.1.wav)
