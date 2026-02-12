@@ -31,9 +31,9 @@ jobs:
           yes | flet build linux --product "Expressive Video Compressor" --verbose
       - name: Package Linux (Self-Extracting Run)
         run: |
-          # Identify the executable name (usually lowercase product name with underscores)
-          # We search for the executable file in build/linux/
-          EXE_NAME=$(find build/linux -maxdepth 1 -executable -type f -not -name "*.so*" | head -n 1 | xargs basename)
+          # Identify the executable name (usually lowercase product name with underscores or based on script)
+          # We search for the executable file in build/linux/ excluding common non-app binaries
+          EXE_NAME=$(find build/linux -maxdepth 1 -executable -type f -not -name "*.so*" -not -name "flet" | head -n 1 | xargs basename)
           echo "Found executable: $EXE_NAME"
           # Package the entire build/linux directory into a single .run file
           makeself build/linux ExpressiveVideoCompressor-Linux.run "Expressive Video Compressor" ./"$EXE_NAME"
@@ -61,24 +61,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install flet==0.80.2 pyinstaller
-      - name: Build Windows (Native Professional)
-        env:
-          PYTHONUTF8: 1
-        run: |
-          Write-Output "y" | flet build windows --product "Expressive Video Compressor" --verbose
       - name: Build Windows (Single Executable)
         run: |
-          flet pack main.py --name "ExpressiveVideoCompressor-Windows-Single" --yes --verbose
-      - name: Archive Windows Native
-        run: |
-          Compress-Archive -Path build/windows/* -DestinationPath ExpressiveVideoCompressor-Windows-Portable.zip
+          flet pack main.py --name "ExpressiveVideoCompressor-Windows" --yes --verbose
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: video-compressor-windows
-          path: |
-            ExpressiveVideoCompressor-Windows-Portable.zip
-            dist/ExpressiveVideoCompressor-Windows-Single.exe
+          path: dist/ExpressiveVideoCompressor-Windows.exe
 
   create-release:
     needs: [build-linux, build-windows]
@@ -103,7 +93,6 @@ jobs:
           files: |
             release-assets/ExpressiveVideoCompressor-Linux-Native.tar.gz
             release-assets/ExpressiveVideoCompressor-Linux.run
-            release-assets/ExpressiveVideoCompressor-Windows-Portable.zip
-            release-assets/ExpressiveVideoCompressor-Windows-Single.exe
+            release-assets/ExpressiveVideoCompressor-Windows.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
