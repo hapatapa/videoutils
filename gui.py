@@ -10,6 +10,11 @@ import flet as ft
 from flet_video import Video, VideoMedia, PlaylistMode
 import compressor_logic as logic
 
+# Logic to prevent console windows from popping up on Windows
+SUBPROCESS_FLAGS = 0
+if os.name == 'nt':
+    SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW
+
 async def main(page: ft.Page):
     # Set assets_dir to the assets folder directly
     page.assets_dir = os.path.join(os.path.dirname(__file__), "assets")
@@ -306,7 +311,7 @@ async def main(page: ft.Page):
                 "-frames:v", "1",
                 outfile
             ]
-            subprocess.run(cmd, capture_output=True)
+            subprocess.run(cmd, capture_output=True, creationflags=SUBPROCESS_FLAGS)
             return outfile
         except: return None
 
@@ -319,7 +324,7 @@ async def main(page: ft.Page):
                 "-vframes", "1",
                 outfile
             ]
-            subprocess.run(cmd, capture_output=True)
+            subprocess.run(cmd, capture_output=True, creationflags=SUBPROCESS_FLAGS)
             return outfile
         except: return None
 
@@ -1397,7 +1402,7 @@ async def main(page: ft.Page):
             input_fps = 30 # fallback
             try:
                 fps_cmd = ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=r_frame_rate", "-of", "default=noprint_wrappers=1:nokey=1", input_path]
-                fps_res = subprocess.run(fps_cmd, capture_output=True, text=True)
+                fps_res = subprocess.run(fps_cmd, capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
                 fps_str = fps_res.stdout.strip()
                 if "/" in fps_str:
                     n, d = map(float, fps_str.split("/"))
@@ -1425,13 +1430,13 @@ async def main(page: ft.Page):
                  log(f"\n🚀 CONVERTING: {os.path.basename(input_path)}")
                  # Ensure all cmd parts are strings
                  safe_cmd = [str(x) for x in cmd if x is not None]
-                 process = subprocess.Popen(safe_cmd, stderr=subprocess.PIPE, universal_newlines=True)
+                 process = subprocess.Popen(safe_cmd, stderr=subprocess.PIPE, universal_newlines=True, creationflags=SUBPROCESS_FLAGS)
                  
                  # Get total duration
                  total_duration = 0
                  try:
                      dur_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input_path]
-                     dur_res = subprocess.run(dur_cmd, capture_output=True, text=True)
+                     dur_res = subprocess.run(dur_cmd, capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
                      total_duration = float(dur_res.stdout.strip())
                  except: pass
                  
@@ -2162,7 +2167,7 @@ async def main(page: ft.Page):
                            "-c", "copy", "-avoid_negative_ts", "make_zero", temp_out]
                     
                     log(f"  Extracting segment {idx + 1}/{len(keep_segments)}...")
-                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    result = subprocess.run(cmd, capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
                     if result.returncode != 0:
                         log(f"  Warning: Segment {idx + 1} extraction had issues")
                 
@@ -2183,7 +2188,7 @@ async def main(page: ft.Page):
                     log(f"  Concatenating {len(temp_files)} segments...")
                     concat_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_file, 
                                   "-c", "copy", output_path]
-                    result = subprocess.run(concat_cmd, capture_output=True, text=True, cwd=base_dir)
+                    result = subprocess.run(concat_cmd, capture_output=True, text=True, cwd=base_dir, creationflags=SUBPROCESS_FLAGS)
                     
                     # Cleanup
                     for tf in temp_files:
@@ -2245,7 +2250,7 @@ async def main(page: ft.Page):
         try:
             cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", 
                    "-of", "default=noprint_wrappers=1:nokey=1", path]
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
             return float(result.stdout.strip())
         except:
             return 0.0

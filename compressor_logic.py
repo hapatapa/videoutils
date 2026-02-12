@@ -5,6 +5,11 @@ import platform
 import threading
 import re
 
+# Logic to prevent console windows from popping up on Windows
+SUBPROCESS_FLAGS = 0
+if os.name == 'nt':
+    SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW
+
 def hms_to_seconds(hms):
     try:
         parts = hms.split(':')
@@ -16,7 +21,7 @@ def hms_to_seconds(hms):
 
 def get_hardware_info():
     try:
-        lspci = subprocess.check_output(['lspci'], encoding='utf-8', stderr=subprocess.DEVNULL)
+        lspci = subprocess.check_output(['lspci'], encoding='utf-8', stderr=subprocess.DEVNULL, creationflags=SUBPROCESS_FLAGS)
         lspci_up = lspci.upper()
         if "NVIDIA" in lspci_up: return "nvidia"
         if "AMD" in lspci_up or "ATI" in lspci_up or "ADVANCED MICRO DEVICES" in lspci_up: return "amd"
@@ -27,7 +32,7 @@ def get_hardware_info():
 
 def get_all_encoders():
     try:
-        output = subprocess.check_output(['ffmpeg', '-encoders'], encoding='utf-8', stderr=subprocess.DEVNULL)
+        output = subprocess.check_output(['ffmpeg', '-encoders'], encoding='utf-8', stderr=subprocess.DEVNULL, creationflags=SUBPROCESS_FLAGS)
         encoders = []
         for line in output.split('\n'):
             # Only look for Video (V) encoders
@@ -42,7 +47,7 @@ def get_all_encoders():
 
 def get_encoder(codec_choice, use_gpu, log_func=print):
     try:
-        output = subprocess.check_output(['ffmpeg', '-encoders'], encoding='utf-8', stderr=subprocess.DEVNULL)
+        output = subprocess.check_output(['ffmpeg', '-encoders'], encoding='utf-8', stderr=subprocess.DEVNULL, creationflags=SUBPROCESS_FLAGS)
         is_linux = platform.system().lower() == "linux"
         
         if use_gpu:
@@ -135,7 +140,7 @@ def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, lo
 
     # Get Duration
     try:
-        probe = subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', input_file], encoding='utf-8')
+        probe = subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', input_file], encoding='utf-8', creationflags=SUBPROCESS_FLAGS)
         duration = float(probe)
     except Exception as e:
         log_func(f"❌ Error getting duration: {e}")
@@ -277,7 +282,7 @@ def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, lo
             '-vf', 'fps=1,scale=480:-1', '-update', '1', '-f', 'image2', preview_path
         ]
         try:
-            prev_process = subprocess.Popen(prev_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            prev_process = subprocess.Popen(prev_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=SUBPROCESS_FLAGS)
         except: pass
 
     # Two-Pass Logic: Force single pass for legacy encoders
@@ -315,7 +320,8 @@ def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, lo
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 universal_newlines=True,
-                bufsize=1
+                bufsize=1,
+                creationflags=SUBPROCESS_FLAGS
             )
 
             progress_re = re.compile(r"fps=\s*([\d.]+).*time=(\d+:\d+:\d+\.\d+).*speed=\s*([\d.]+)x")
@@ -440,7 +446,7 @@ def auto_compress(input_file, target_mb, codec, use_gpu, output_file=None, log_f
             if final_size <= target_mb:
                 smart_log(f"\n✅ SUCCESS: {output_file} ({final_size:.2f} MB)")
                 if is_deck:
-                    subprocess.run(['kitten', 'notify', 'Compression Done', f"{res}p {codec} finished"], stderr=subprocess.DEVNULL)
+                    subprocess.run(['kitten', 'notify', 'Compression Done', f"{res}p {codec} finished"], stderr=subprocess.DEVNULL, creationflags=SUBPROCESS_FLAGS)
                 try: os.remove(preview_path) if preview_path and os.path.exists(preview_path) else None
                 except: pass
                 return True, output_file
@@ -460,7 +466,7 @@ def simple_convert(input_file, output_file, vcodec, acodec, log_func=print, prog
         total_duration = 0
         try:
             dur_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input_file]
-            dur_res = subprocess.run(dur_cmd, capture_output=True, text=True)
+            dur_res = subprocess.run(dur_cmd, capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
             total_duration = float(dur_res.stdout.strip())
         except: pass
 
@@ -479,7 +485,7 @@ def simple_convert(input_file, output_file, vcodec, acodec, log_func=print, prog
         cmd.append(output_file)
         
         log_func(f"🚀 Running: {' '.join(cmd)}")
-        process = subprocess.Popen(cmd, stderr=subprocess.PIPE, universal_newlines=True)
+        process = subprocess.Popen(cmd, stderr=subprocess.PIPE, universal_newlines=True, creationflags=SUBPROCESS_FLAGS)
         
         progress_re = re.compile(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})")
         
