@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# --- Expressive Video Compressor Build Script ---
+# --- Video Utilities Build Script ---
 # This script bundles the application into standalone binaries.
 # Note: Cross-compiling for Windows from Linux requires 'wine' and a Windows Python environment.
 # Native builds (Linux on Linux) are recommended.

@@ -28,7 +28,7 @@ jobs:
           pip install flet==0.80.2 pyinstaller
       - name: Build Linux (Native Professional)
         run: |
-          yes | flet build linux --product "Expressive Video Compressor" --verbose
+          yes | flet build linux --product "Video Utilities" --verbose
       - name: Package Linux (Self-Extracting Run)
         run: |
           # Identify the executable name (usually lowercase product name with underscores or based on script)
@@ -36,17 +36,17 @@ jobs:
           EXE_NAME=$(find build/linux -maxdepth 1 -executable -type f -not -name "*.so*" -not -name "flet" | head -n 1 | xargs basename)
           echo "Found executable: $EXE_NAME"
           # Package the entire build/linux directory into a single .run file
-          makeself build/linux ExpressiveVideoCompressor-Linux.run "Expressive Video Compressor" ./"$EXE_NAME"
+          makeself build/linux VideoUtilities-Linux.run "Video Utilities" ./"$EXE_NAME"
       - name: Archive Linux Native
         run: |
-          tar -czf ExpressiveVideoCompressor-Linux-Native.tar.gz -C build/linux .
+          tar -czf VideoUtilities-Linux-Native.tar.gz -C build/linux .
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: video-compressor-linux
+          name: video-utilities-linux
           path: |
-            ExpressiveVideoCompressor-Linux-Native.tar.gz
-            ExpressiveVideoCompressor-Linux.run
+            VideoUtilities-Linux-Native.tar.gz
+            VideoUtilities-Linux.run
 
   build-windows:
     runs-on: windows-2022
@@ -63,12 +63,12 @@ jobs:
           pip install flet==0.80.2 pyinstaller
       - name: Build Windows (Single Executable)
         run: |
-          flet pack main.py --name "ExpressiveVideoCompressor-Windows" --yes --verbose
+          flet pack main.py --name "VideoUtilities-Windows" --yes --verbose
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: video-compressor-windows
-          path: dist/ExpressiveVideoCompressor-Windows.exe
+          name: video-utilities-windows
+          path: dist/VideoUtilities-Windows.exe
 
   create-release:
     needs: [build-linux, build-windows]
@@ -83,16 +83,29 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Get Release Name
+        id: release_name
+        shell: bash
+        run: |
+          MSG="${{ github.event.head_commit.message }}"
+          if [ -z "$MSG" ]; then
+            MSG="Manual Build ${{ github.run_number }}"
+          else
+            # Extract first line of commit message
+            MSG=$(echo "$MSG" | head -n 1)
+          fi
+          echo "title=$MSG" >> $GITHUB_OUTPUT
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', github.run_number) }}
-          name: ${{ github.ref_type == 'tag' && format('Release {0}', github.ref_name) || format('Build {0}', github.run_number) }}
+          name: ${{ steps.release_name.outputs.title }}
           draft: false
           prerelease: ${{ github.ref_name != 'main' && github.ref_type != 'tag' }}
           files: |
-            release-assets/ExpressiveVideoCompressor-Linux-Native.tar.gz
-            release-assets/ExpressiveVideoCompressor-Linux.run
-            release-assets/ExpressiveVideoCompressor-Windows.exe
+            release-assets/VideoUtilities-Linux-Native.tar.gz
+            release-assets/VideoUtilities-Linux.run
+            release-assets/VideoUtilities-Windows.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

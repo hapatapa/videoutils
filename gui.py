@@ -22,7 +22,7 @@ async def main(page: ft.Page):
     log_path = os.path.join(os.path.dirname(__file__), "trace.log")
     with open(log_path, "w") as f: f.write("Main started\n"); f.flush()
     current_tab = ""
-    page.title = "Expressive Video Compressor"
+    page.title = "Video Utilities"
     page.theme_mode = ft.ThemeMode.DARK
     page.theme = ft.Theme(color_scheme_seed=ft.Colors.INDIGO)
     page.padding = 15
@@ -901,7 +901,7 @@ async def main(page: ft.Page):
     header = ft.Container(
         content=ft.Row([
             ft.Icon(ft.Icons.VIDEO_LIBRARY_ROUNDED, size=30, color=ft.Colors.PRIMARY),
-            ft.Text("Expressive Video Compressor", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
+            ft.Text("Video Utilities", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
         ], alignment=ft.MainAxisAlignment.CENTER),
         margin=ft.Margin.only(bottom=10)
     )
@@ -2664,7 +2664,12 @@ async def main(page: ft.Page):
         page.run_task(monitor_preview_loop)
      
 def run_cli():
-    print("\n--- Expressive Video Compressor (CLI Mode) ---")
+    """
+    Official Entry Point for Video Utilities.
+    Using delayed imports ensures that child processes (worker threads/pids)
+    do not accidentally re-initialize the entire GUI, preventing fork bombs.
+    """
+    print("\n--- Video Utilities (CLI Mode) ---")
     
     # Helper to get arg or prompt
     def get_arg_or_input(flag, prompt, default=None):

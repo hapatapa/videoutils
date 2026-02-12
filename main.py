@@ -4,7 +4,7 @@ import os
 
 def start_app():
     """
-    Official Entry Point for Expressive Video Compressor.
+    Official Entry Point for Video Utilities.
     Using delayed imports ensures that child processes (worker threads/pids)
     do not accidentally re-initialize the entire GUI, preventing fork bombs.
     """
