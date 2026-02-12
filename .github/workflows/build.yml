@@ -22,18 +22,31 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libwebkit2gtk-4.1-dev libappindicator3-dev libsecret-1-dev mpv libmpv-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libwebkit2gtk-4.1-dev libappindicator3-dev libsecret-1-dev mpv libmpv-dev makeself
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install flet==0.80.2 pyinstaller
-      - name: Build Linux (Single Executable)
+      - name: Build Linux (Native Professional)
         run: |
-          flet pack main.py --name "ExpressiveVideoCompressor-Linux" --yes --verbose
+          yes | flet build linux --product "Expressive Video Compressor" --verbose
+      - name: Package Linux (Self-Extracting Run)
+        run: |
+          # Identify the executable name (usually lowercase product name with underscores)
+          # We search for the executable file in build/linux/
+          EXE_NAME=$(find build/linux -maxdepth 1 -executable -type f -not -name "*.so*" | head -n 1 | xargs basename)
+          echo "Found executable: $EXE_NAME"
+          # Package the entire build/linux directory into a single .run file
+          makeself build/linux ExpressiveVideoCompressor-Linux.run "Expressive Video Compressor" ./"$EXE_NAME"
+      - name: Archive Linux Native
+        run: |
+          tar -czf ExpressiveVideoCompressor-Linux-Native.tar.gz -C build/linux .
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: video-compressor-linux
-          path: dist/ExpressiveVideoCompressor-Linux
+          path: |
+            ExpressiveVideoCompressor-Linux-Native.tar.gz
+            ExpressiveVideoCompressor-Linux.run
 
   build-windows:
     runs-on: windows-2022
@@ -48,14 +61,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install flet==0.80.2 pyinstaller
+      - name: Build Windows (Native Professional)
+        env:
+          PYTHONUTF8: 1
+        run: |
+          Write-Output "y" | flet build windows --product "Expressive Video Compressor" --verbose
       - name: Build Windows (Single Executable)
         run: |
-          flet pack main.py --name "ExpressiveVideoCompressor-Windows" --yes --verbose
+          flet pack main.py --name "ExpressiveVideoCompressor-Windows-Single" --yes --verbose
+      - name: Archive Windows Native
+        run: |
+          Compress-Archive -Path build/windows/* -DestinationPath ExpressiveVideoCompressor-Windows-Portable.zip
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: video-compressor-windows
-          path: dist/ExpressiveVideoCompressor-Windows.exe
+          path: |
+            ExpressiveVideoCompressor-Windows-Portable.zip
+            dist/ExpressiveVideoCompressor-Windows-Single.exe
 
   create-release:
     needs: [build-linux, build-windows]
@@ -78,7 +101,9 @@ jobs:
           draft: false
           prerelease: ${{ github.ref_name != 'main' && github.ref_type != 'tag' }}
           files: |
-            release-assets/ExpressiveVideoCompressor-Linux
-            release-assets/ExpressiveVideoCompressor-Windows.exe
+            release-assets/ExpressiveVideoCompressor-Linux-Native.tar.gz
+            release-assets/ExpressiveVideoCompressor-Linux.run
+            release-assets/ExpressiveVideoCompressor-Windows-Portable.zip
+            release-assets/ExpressiveVideoCompressor-Windows-Single.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

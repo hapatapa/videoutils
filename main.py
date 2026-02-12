@@ -18,13 +18,13 @@ def start_app():
     if "--cli" in sys.argv:
         gui.run_cli()
     else:
-        # Standard Flet Launch
+        # Modern Flet Launch
         assets_path = os.path.join(os.path.dirname(__file__), "assets")
         if not os.path.exists(assets_path):
             assets_path = "assets" # Fallback
             
-        ft.app(
-            target=gui.main,
+        ft.run(
+            gui.main,
             assets_dir=assets_path
         )
 
