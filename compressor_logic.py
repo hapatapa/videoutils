@@ -10,6 +10,65 @@ SUBPROCESS_FLAGS = 0
 if os.name == 'nt':
     SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW
 
+def is_ffmpeg_installed():
+    try:
+        subprocess.run(['ffmpeg', '-version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=SUBPROCESS_FLAGS, check=True)
+        return True
+    except:
+        return False
+
+def install_ffmpeg(log_func=print):
+    system = platform.system().lower()
+    
+    try:
+        if system == "windows":
+            log_func("🪟 Windows detected. Attempting install via winget...")
+            # Using run instead of Popen for simplicity here, or Popen if we want to stream logs
+            process = subprocess.Popen(['winget', 'install', 'ffmpeg'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, creationflags=SUBPROCESS_FLAGS)
+            for line in process.stdout:
+                log_func(line.strip())
+            process.wait()
+            return process.returncode == 0
+            
+        elif system == "linux":
+            log_func("🐧 Linux detected. Identifying package manager...")
+            
+            # Check for common package managers
+            managers = [
+                (['apt-get', 'install', '-y', 'ffmpeg'], "Debian/Ubuntu/Pop!_OS/Mint"),
+                (['pacman', '-S', '--noconfirm', 'ffmpeg'], "Arch/Manjaro/SteamOS/Endeavour"),
+                (['dnf', 'install', '-y', 'ffmpeg'], "Fedora/RHEL/CentOS")
+            ]
+            
+            for cmd_args, distro_name in managers:
+                if subprocess.run(['which', cmd_args[0]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=SUBPROCESS_FLAGS).returncode == 0:
+                    log_func(f"📦 Found {distro_name} manager. Installing...")
+                    # Note: sudo might be needed, which is tricky in a GUI without a terminal.
+                    # We'll try pkexec or similar if available, otherwise raw.
+                    
+                    final_cmd = cmd_args
+                    if os.getuid() != 0:
+                        # Try to use pkexec for a GUI password prompt
+                        if subprocess.run(['which', 'pkexec'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=SUBPROCESS_FLAGS).returncode == 0:
+                            final_cmd = ['pkexec'] + cmd_args
+                        else:
+                            log_func("⚠️ sudo privileges required but pkexec (GUI sudo) not found.")
+                    
+                    process = subprocess.Popen(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, creationflags=SUBPROCESS_FLAGS)
+                    for line in process.stdout:
+                        log_func(line.strip())
+                    process.wait()
+                    return process.returncode == 0
+            
+            log_func("❌ No supported package manager found (apt, pacman, dnf).")
+            return False
+            
+    except Exception as e:
+        log_func(f"❌ Install error: {e}")
+        return False
+    
+    return False
+
 def hms_to_seconds(hms):
     try:
         parts = hms.split(':')

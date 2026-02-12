@@ -33,6 +33,57 @@ async def main(page: ft.Page):
     page.window.resizable = True
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
+    # --- FFmpeg Mandatory Check ---
+    if not logic.is_ffmpeg_installed():
+        installing = False
+        status_msg = ft.Text("This app requires FFmpeg to function.", color=ft.Colors.WHITE70)
+        progress_ring = ft.ProgressRing(visible=False, width=16, height=16, stroke_width=2)
+        
+        async def do_install(e):
+            nonlocal installing
+            if installing: return
+            installing = True
+            e.control.disabled = True
+            progress_ring.visible = True
+            status_msg.value = "Installing FFmpeg, please wait..."
+            page.update()
+            
+            # Run install in thread to keep UI alive
+            def run_install():
+                success = logic.install_ffmpeg(print)
+                return success
+
+            loop = asyncio.get_event_loop()
+            success = await loop.run_in_executor(None, run_install)
+            
+            if success:
+                page.close(ff_modal)
+                page.show_snack_bar(ft.SnackBar(ft.Text("FFmpeg installed successfully!"), bgcolor=ft.Colors.GREEN_700))
+            else:
+                installing = False
+                e.control.disabled = False
+                progress_ring.visible = False
+                status_msg.value = "Installation failed. Please install FFmpeg manually."
+                page.update()
+
+        ff_modal = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("FFmpeg Not Found"),
+            content=ft.Column([
+                ft.Text("FFmpeg is missing from your system. It's the engine that powers all video processing in this app."),
+                ft.Row([progress_ring, status_msg], spacing=10),
+            ], tight=True, spacing=20),
+            actions=[
+                ft.ElevatedButton("Install FFmpeg Automatically", on_click=do_install, icon=ft.Icons.DOWNLOAD),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        page.open(ff_modal)
+        
+        # Wait until it's installed (modal closed)
+        while page.dialog == ff_modal:
+            await asyncio.sleep(0.5)
+
     # State
     input_display_field = ft.Ref[ft.TextField]()
     output_display_field = ft.Ref[ft.TextField]()
