@@ -1466,6 +1466,7 @@ async def main(page: ft.Page):
     )
 
     conv_preview_switch = ft.Ref[ft.Switch]()
+    conv_remove_bg_switch = ft.Ref[ft.Switch]()
     
     def run_conversion():
         if not conv_file_paths or not conv_target_path: return
@@ -1511,8 +1512,8 @@ async def main(page: ft.Page):
         
         is_audio = fmt in ["mp3", "wav", "flac", "aac", "opus", "ogg", "m4a"]
         
-        if fmt == "gif":
-            # Detect source FPS to avoid slow-motion issues (GIFs handle max 50fps reliably)
+        if fmt == "gif" or fmt == "webp":
+            # Detect source FPS
             input_fps = 30 # fallback
             try:
                 fps_cmd = ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=r_frame_rate", "-of", "default=noprint_wrappers=1:nokey=1", input_path]
@@ -1525,11 +1526,25 @@ async def main(page: ft.Page):
                     input_fps = float(fps_str)
             except: pass
             
-            # Cap at 50fps: high-FPS GIFs (like 60) often trigger "slow motion" fallback in browsers (delay 1 -> 10)
-            gif_fps = min(input_fps, 50)
-            
-            # Use detected FPS (capped at 50)
-            cmd = ["ffmpeg", "-y", "-i", input_path, "-vf", f"fps={gif_fps:.2f},scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse", output_path]
+            if fmt == "gif":
+                # Cap at 50fps: high-FPS GIFs (like 60) often trigger "slow motion" fallback in browsers (delay 1 -> 10)
+                gif_fps = min(input_fps, 50)
+                cmd = ["ffmpeg", "-y", "-i", input_path, "-vf", f"fps={gif_fps:.2f},scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse", output_path]
+            else:
+                # Animated WebP — matches: ffmpeg -i input -vf "fps=60,scale=w=-1:h=720" -vcodec libwebp -lossless 0 -q:v 80 -loop 0 -preset default -an output.webp
+                remove_bg = conv_remove_bg_switch.current and conv_remove_bg_switch.current.value
+                if remove_bg:
+                    vf = f"fps={int(input_fps)},scale=w=-1:h=720,colorkey=black:0.1:0.2,format=rgba"
+                else:
+                    vf = f"fps={int(input_fps)},scale=w=-1:h=720"
+                cmd = [
+                    "ffmpeg", "-y", "-i", input_path,
+                    "-vf", vf,
+                    "-vcodec", "libwebp", "-lossless", "0",
+                    "-q:v", "80", "-loop", "0",
+                    "-preset", "default", "-an",
+                    output_path
+                ]
         else:
             cmd = ["ffmpeg", "-y", "-i", input_path]
             if is_audio:
@@ -1621,7 +1636,8 @@ async def main(page: ft.Page):
                         options=[
                             ft.DropdownOption("mp4"), ft.DropdownOption("mkv"), 
                             ft.DropdownOption("mp3"), ft.DropdownOption("wav"), 
-                            ft.DropdownOption("flac"), ft.DropdownOption("gif")
+                            ft.DropdownOption("flac"), ft.DropdownOption("gif"),
+                            ft.DropdownOption("webp")
                         ], 
                         value="mp4", 
                         on_select=on_conv_format_change, 
@@ -1668,6 +1684,11 @@ async def main(page: ft.Page):
                     ft.Icon(ft.Icons.REMOVE_RED_EYE_OUTLINED, size=18, color=ft.Colors.ON_SURFACE_VARIANT),
                     ft.Text("Preview", color=ft.Colors.ON_SURFACE_VARIANT, size=13),
                     ft.Switch(ref=conv_preview_switch, value=True, active_color=ft.Colors.PRIMARY, scale=0.8)
+                ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Row([
+                    ft.Icon(ft.Icons.FORMAT_COLOR_RESET_OUTLINED, size=18, color=ft.Colors.ON_SURFACE_VARIANT),
+                    ft.Text("Remove Black BG", color=ft.Colors.ON_SURFACE_VARIANT, size=13),
+                    ft.Switch(ref=conv_remove_bg_switch, value=False, active_color=ft.Colors.PRIMARY, scale=0.8)
                 ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             ], alignment=ft.MainAxisAlignment.START, spacing=10, wrap=True),
         ], spacing=5),
