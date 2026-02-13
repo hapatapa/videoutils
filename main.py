@@ -23,10 +23,13 @@ def start_app():
         if not os.path.exists(assets_path):
             assets_path = "assets" # Fallback
             
+        # Official Flet Launch
         ft.run(
             gui.main,
             assets_dir=assets_path
         )
+
+
 
 if __name__ == "__main__":
     start_app()

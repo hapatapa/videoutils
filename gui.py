@@ -24,7 +24,13 @@ async def main(page: ft.Page):
     current_tab = ""
     page.title = "Video Utilities"
     page.theme_mode = ft.ThemeMode.DARK
-    page.theme = ft.Theme(color_scheme_seed=ft.Colors.INDIGO)
+    page.fonts = {
+        "Roboto Flex": "https://raw.githubusercontent.com/google/fonts/main/ofl/robotoflex/RobotoFlex%5BGRAD%2COops%2CYOPQ%2CYTLC%2CYTAS%2CYTDE%2CYTFI%2CYTUC%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf"
+    }
+    page.theme = ft.Theme(
+        font_family="Roboto Flex",
+        color_scheme_seed=ft.Colors.INDIGO
+    )
     page.padding = 15
     page.window.width = 1150
     page.window.height = 900
@@ -124,14 +130,16 @@ async def main(page: ft.Page):
         progress_fill.current.width = bar_max_w * pct
         progress_fill.current.update()
 
+
     def update_conv_progress_bar(pct):
         if not conv_progress_fill.current or not page.window.width: return
-        
         prev_w = conv_preview_container.current.width if conv_preview_container.current and conv_preview_container.current.width else 0
-        
         available_w = page.window.width - 40
-        if prev_w > 0:
-            available_w -= (20 + prev_w)
+        if prev_w > 0: available_w -= (20 + prev_w)
+        bar_max_w = available_w - 30
+        if bar_max_w < 0: bar_max_w = 0
+        conv_progress_fill.current.width = bar_max_w * pct
+        conv_progress_fill.current.update()
             
         bar_max_w = available_w - 30
         if bar_max_w < 0: bar_max_w = 0
@@ -596,7 +604,7 @@ async def main(page: ft.Page):
     advanced_dialog = ft.AlertDialog(
         title=ft.GestureDetector(
             content=ft.Container(
-                content=ft.Text("Advanced Settings", weight=ft.FontWeight.BOLD),
+                content=ft.Text("Advanced Settings", weight=ft.FontWeight.W_900),
                 padding=10
             ),
             on_tap=on_advanced_title_click
@@ -608,7 +616,7 @@ async def main(page: ft.Page):
                 ft.Container(
                     content=ft.Row([
                         ft.Column([
-                            ft.Text("Two-Pass Encoding", weight=ft.FontWeight.BOLD, size=14),
+                            ft.Text("Two-Pass Encoding", weight=ft.FontWeight.W_900, size=14),
                             ft.Text("Higher quality, 2x encoding time", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
                         ], expand=True),
                         ft.Switch(ref=two_pass_switch, value=False, active_color=ft.Colors.PRIMARY)
@@ -618,7 +626,7 @@ async def main(page: ft.Page):
                 ft.Container(
                     content=ft.Row([
                         ft.Column([
-                            ft.Text("10-Bit Color (HDR/High Fidelity)", weight=ft.FontWeight.BOLD, size=14),
+                            ft.Text("10-Bit Color (HDR/High Fidelity)", weight=ft.FontWeight.W_900, size=14),
                             ft.Text("Uses yuv420p10le pixel format", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
                         ], expand=True),
                         ft.Switch(ref=ten_bit_switch, value=False, active_color=ft.Colors.PRIMARY)
@@ -628,7 +636,7 @@ async def main(page: ft.Page):
                 ft.Container(
                     content=ft.Row([
                         ft.Column([
-                            ft.Text("Video Denoising", weight=ft.FontWeight.BOLD, size=14),
+                            ft.Text("Video Denoising", weight=ft.FontWeight.W_900, size=14),
                             ft.Text("HQDN3D spatio-temporal filter", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
                         ], expand=True),
                         ft.Switch(ref=denoise_switch, value=False, active_color=ft.Colors.PRIMARY)
@@ -638,7 +646,7 @@ async def main(page: ft.Page):
                 ft.Container(
                     content=ft.Row([
                         ft.Column([
-                            ft.Text("Adaptive Quantization (AQ)", weight=ft.FontWeight.BOLD, size=14),
+                            ft.Text("Adaptive Quantization (AQ)", weight=ft.FontWeight.W_900, size=14),
                             ft.Text("Prioritize bits for moving objects/faces", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
                         ], expand=True),
                         ft.Switch(ref=aq_switch, value=False, active_color=ft.Colors.PRIMARY)
@@ -646,7 +654,7 @@ async def main(page: ft.Page):
                     tooltip="Detects moving objects and complex textures to prioritize them for higher quality while compressing static areas more aggressively."
                 ),
                 ft.Divider(),
-                ft.Text("Performance Preset (cpu-used)", size=14, weight=ft.FontWeight.BOLD),
+                ft.Text("Performance Preset (cpu-used)", size=14, weight=ft.FontWeight.W_900),
                 ft.Container(
                     content=ft.Slider(
                         ref=cpu_used_slider, 
@@ -685,7 +693,7 @@ async def main(page: ft.Page):
     error_dialog = ft.AlertDialog(
         title=ft.Row([
             ft.Icon(ft.Icons.ERROR_OUTLINE, color=ft.Colors.ERROR, size=32),
-            ft.Text("Compression Error", weight=ft.FontWeight.BOLD, color=ft.Colors.ERROR)
+            ft.Text("Compression Error", weight=ft.FontWeight.W_900, color=ft.Colors.ERROR)
         ], spacing=10),
         content=ft.Container(
             content=ft.Column([
@@ -952,7 +960,7 @@ async def main(page: ft.Page):
     header = ft.Container(
         content=ft.Row([
             ft.Icon(ft.Icons.VIDEO_LIBRARY_ROUNDED, size=30, color=ft.Colors.PRIMARY),
-            ft.Text("Video Utilities", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
+            ft.Text("Video Utilities", size=24, weight=ft.FontWeight.W_900, color=ft.Colors.PRIMARY),
         ], alignment=ft.MainAxisAlignment.CENTER),
         margin=ft.Margin.only(bottom=10)
     )
@@ -1039,7 +1047,7 @@ async def main(page: ft.Page):
         content=ft.Column([
             ft.Row([
                 ft.Icon(ft.Icons.SETTINGS_OUTLINED, color=ft.Colors.PRIMARY, size=20),
-                ft.Text("Compression Settings", size=16, weight=ft.FontWeight.W_600),
+                ft.Text("Compression Settings", size=16, weight=ft.FontWeight.W_900),
             ], spacing=5),
             ft.Divider(color=ft.Colors.OUTLINE_VARIANT, height=5),
             ft.Row([
@@ -1161,7 +1169,7 @@ async def main(page: ft.Page):
                 color=ft.Colors.ON_SURFACE_VARIANT,
                 visible=False
             ),
-            ft.Text("Progress", size=48, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+            ft.Text("Progress", size=48, weight=ft.FontWeight.W_900, color=ft.Colors.WHITE),
             ft.Row([
                 ft.Text("Resolution : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
                 ft.Text("---", ref=res_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
@@ -1202,7 +1210,7 @@ async def main(page: ft.Page):
         content=ft.Column([
             ft.Row([
                 ft.Icon(ft.Icons.PLAY_CIRCLE_OUTLINE_ROUNDED, size=20, color=ft.Colors.PRIMARY),
-                ft.Text("Live Preview:", size=16, weight=ft.FontWeight.W_600),
+                ft.Text("Live Preview:", size=16, weight=ft.FontWeight.W_900),
             ], spacing=10, alignment=ft.MainAxisAlignment.CENTER),
             ft.Container(
                 content=ft.Stack([
@@ -1244,7 +1252,7 @@ async def main(page: ft.Page):
                         animate_opacity=400,
                         alignment=ft.Alignment.CENTER,
                         expand=True,
-                        content=ft.Text(ref=status_text, value="", size=28, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
+                        content=ft.Text(ref=status_text, value="", size=28, weight=ft.FontWeight.W_900, color=ft.Colors.WHITE)
                     )
                 ], expand=True),
                 alignment=ft.Alignment.CENTER,
@@ -1274,7 +1282,7 @@ async def main(page: ft.Page):
             ref=compress_btn, 
             content=ft.Row([
                 ft.Icon(ft.Icons.BOLT_ROUNDED), 
-                ft.Text("Start Compression", ref=btn_text, size=16, weight=ft.FontWeight.BOLD)
+                ft.Text("Start Compression", size=16, weight=ft.FontWeight.W_900)
             ], alignment=ft.MainAxisAlignment.CENTER, spacing=10), 
             style=ft.ButtonStyle(
                 padding=15, 
@@ -1546,7 +1554,7 @@ async def main(page: ft.Page):
         content=ft.Column([
             ft.Row([
                 ft.Icon(ft.Icons.SETTINGS_OUTLINED, color=ft.Colors.PRIMARY, size=20), 
-                ft.Text("Conversion Settings", size=16, weight=ft.FontWeight.W_600)
+                ft.Text("Conversion Settings", size=16, weight=ft.FontWeight.W_900)
             ], spacing=5),
             ft.Divider(color=ft.Colors.OUTLINE_VARIANT, height=10),
             ft.Row([
@@ -1619,7 +1627,7 @@ async def main(page: ft.Page):
             ref=conv_start_btn, 
             content=ft.Row([
                 ft.Icon(ft.Icons.BOLT_ROUNDED), 
-                ft.Text("Start Conversion", size=16, weight=ft.FontWeight.BOLD)
+                ft.Text("Start Conversion", size=16, weight=ft.FontWeight.W_900)
             ], alignment=ft.MainAxisAlignment.CENTER, spacing=10), 
             style=ft.ButtonStyle(
                 padding=15, 
@@ -1655,7 +1663,7 @@ async def main(page: ft.Page):
         expand=True,
         content=ft.Column([
             ft.Text("0/0 converted", ref=conv_files_proc_text, size=14, weight=ft.FontWeight.W_500, color=ft.Colors.ON_SURFACE_VARIANT, visible=False),
-            ft.Text("Progress", size=48, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+            ft.Text("Progress", size=48, weight=ft.FontWeight.W_900, color=ft.Colors.WHITE),
             ft.Row([
                 ft.Text("Time remaining : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
                 ft.Text("---", ref=conv_time_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
@@ -2411,7 +2419,7 @@ async def main(page: ft.Page):
     trim_segments_header = ft.Container(
         content=ft.Row([
             ft.Icon(ft.Icons.CONTENT_CUT_ROUNDED, color=ft.Colors.PRIMARY, size=20),
-            ft.Text("Trim Segments", size=16, weight=ft.FontWeight.W_600),
+            ft.Text("Trim Segments", size=16, weight=ft.FontWeight.W_900),
             ft.Container(expand=True),
             ft.IconButton(
                 icon=ft.Icons.ADD_CIRCLE_ROUNDED,
@@ -2465,7 +2473,7 @@ async def main(page: ft.Page):
         content=ft.Column([
             ft.Row([
                 ft.Icon(ft.Icons.PLAY_CIRCLE_FILLED_ROUNDED, size=20, color=ft.Colors.PRIMARY),
-                ft.Text("Preview", size=18, weight=ft.FontWeight.W_600),
+                ft.Text("Preview", size=18, weight=ft.FontWeight.W_900),
 
             ], spacing=10),
             ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
@@ -2548,7 +2556,7 @@ async def main(page: ft.Page):
             ref=trim_save_btn,
             content=ft.Row([
                 ft.Icon(ft.Icons.SAVE_ROUNDED), 
-                ft.Text("Save Trimmed Video", size=16, weight=ft.FontWeight.BOLD)
+                ft.Text("Save Trimmed Video", size=16, weight=ft.FontWeight.W_900)
             ], alignment=ft.MainAxisAlignment.CENTER, spacing=10), 
             on_click=lambda _: page.run_task(run_trimming), 
             expand=True, 

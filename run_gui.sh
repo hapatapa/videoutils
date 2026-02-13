@@ -24,4 +24,5 @@ fi
 
 # 4. Run the GUI application using the venv python
 echo "Starting Video Compressor GUI..."
-"$VENV_DIR/bin/python" gui.py
+"$VENV_DIR/bin/python" main.py
+
