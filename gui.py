@@ -22,7 +22,7 @@ async def main(page: ft.Page):
     # Set assets_dir to the assets folder directly
     page.assets_dir = os.path.join(os.path.dirname(__file__), "assets")
     
-    log_path = os.path.join(os.path.dirname(__file__), "trace.log")
+    log_path = os.path.join(os.path.dirname(__file__), "debug/", "trace.log")
     with open(log_path, "w") as f: f.write("Main started\n"); f.flush()
     current_tab = ""
     page.title = "Video Utilities"
@@ -974,6 +974,18 @@ async def main(page: ft.Page):
         nonlocal conv_target_path
         fmt = e.control.value
         
+        # Show/hide Remove Black BG toggle based on format
+        is_webp = (fmt == "webp")
+        if conv_remove_bg_icon.current:
+            conv_remove_bg_icon.current.visible = is_webp
+            conv_remove_bg_icon.current.update()
+        if conv_remove_bg_text.current:
+            conv_remove_bg_text.current.visible = is_webp
+            conv_remove_bg_text.current.update()
+        if conv_remove_bg_switch.current:
+            conv_remove_bg_switch.current.visible = is_webp
+            conv_remove_bg_switch.current.update()
+        
         # Smart Codec Selection
         if conv_acodec_dropdown.current:
             if fmt == "mp4":
@@ -1502,6 +1514,8 @@ async def main(page: ft.Page):
 
     conv_preview_switch = ft.Ref[ft.Switch]()
     conv_remove_bg_switch = ft.Ref[ft.Switch]()
+    conv_remove_bg_icon = ft.Ref[ft.Icon]()
+    conv_remove_bg_text = ft.Ref[ft.Text]()
     
     def run_conversion():
         if not conv_file_paths or not conv_target_path: return
@@ -1663,69 +1677,63 @@ async def main(page: ft.Page):
             ], spacing=5),
             ft.Divider(color=ft.Colors.OUTLINE_VARIANT, height=10),
             ft.Row([
-                ft.Row([
-                    ft.Dropdown(
-                        ref=conv_fmt_dropdown, 
-                        label="Format", 
-                        width=110, 
-                        options=[
-                            ft.DropdownOption("mp4"), ft.DropdownOption("mkv"), 
-                            ft.DropdownOption("mp3"), ft.DropdownOption("wav"), 
-                            ft.DropdownOption("flac"), ft.DropdownOption("gif"),
-                            ft.DropdownOption("webp")
-                        ], 
-                        value="mp4", 
-                        on_select=on_conv_format_change, 
-                        border_radius=10, 
-                        text_size=13,
-                        content_padding=5,
-                        height=40,
-                        menu_height=300
-                    ),
-                    ft.Dropdown(
-                        ref=conv_vcodec_dropdown, 
-                        label="Video Codec", 
-                        width=120, 
-                        options=[
-                            ft.DropdownOption("copy"), ft.DropdownOption("libx264"), 
-                            ft.DropdownOption("libx265"), ft.DropdownOption("libsvtav1")
-                        ], 
-                        value="libx264", 
-                        border_radius=10, 
-                        text_size=13,
-                        content_padding=5,
-                        height=40,
-                        menu_height=300
-                    ),
-                    ft.Dropdown(
-                        ref=conv_acodec_dropdown, 
-                        label="Audio Codec", 
-                        width=120, 
-                        options=[
-                            ft.DropdownOption("copy"), ft.DropdownOption("aac"), 
-                            ft.DropdownOption("libmp3lame"), ft.DropdownOption("libopus"), 
-                            ft.DropdownOption("pcm_s16le"), ft.DropdownOption("flac")
-                        ], 
-                        value="aac", 
-                        border_radius=10, 
-                        text_size=13,
-                        content_padding=5,
-                        height=40,
-                        menu_height=300
-                    ),
-                ], spacing=10),
-                
-                ft.Row([
-                    ft.Icon(ft.Icons.REMOVE_RED_EYE_OUTLINED, size=18, color=ft.Colors.ON_SURFACE_VARIANT),
-                    ft.Text("Preview", color=ft.Colors.ON_SURFACE_VARIANT, size=13),
-                    ft.Switch(ref=conv_preview_switch, value=True, active_color=ft.Colors.PRIMARY, scale=0.8)
-                ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                ft.Row([
-                    ft.Icon(ft.Icons.FORMAT_COLOR_RESET_OUTLINED, size=18, color=ft.Colors.ON_SURFACE_VARIANT),
-                    ft.Text("Remove Black BG", color=ft.Colors.ON_SURFACE_VARIANT, size=13),
-                    ft.Switch(ref=conv_remove_bg_switch, value=False, active_color=ft.Colors.PRIMARY, scale=0.8)
-                ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            ], alignment=ft.MainAxisAlignment.START, spacing=10, wrap=True),
+                ft.Dropdown(
+                    ref=conv_fmt_dropdown, 
+                    label="Format", 
+                    width=110, 
+                    options=[
+                        ft.DropdownOption("mp4"), ft.DropdownOption("mkv"), 
+                        ft.DropdownOption("mp3"), ft.DropdownOption("wav"), 
+                        ft.DropdownOption("flac"), ft.DropdownOption("gif"),
+                        ft.DropdownOption("webp")
+                    ], 
+                    value="mp4", 
+                    on_select=on_conv_format_change, 
+                    border_radius=10, 
+                    text_size=13,
+                    content_padding=5,
+                    height=40,
+                    menu_height=300
+                ),
+                ft.Dropdown(
+                    ref=conv_vcodec_dropdown, 
+                    label="Video Codec", 
+                    width=120, 
+                    options=[
+                        ft.DropdownOption("copy"), ft.DropdownOption("libx264"), 
+                        ft.DropdownOption("libx265"), ft.DropdownOption("libsvtav1")
+                    ], 
+                    value="libx264", 
+                    border_radius=10, 
+                    text_size=13,
+                    content_padding=5,
+                    height=40,
+                    menu_height=300
+                ),
+                ft.Dropdown(
+                    ref=conv_acodec_dropdown, 
+                    label="Audio Codec", 
+                    width=120, 
+                    options=[
+                        ft.DropdownOption("copy"), ft.DropdownOption("aac"), 
+                        ft.DropdownOption("libmp3lame"), ft.DropdownOption("libopus"), 
+                        ft.DropdownOption("pcm_s16le"), ft.DropdownOption("flac")
+                    ], 
+                    value="aac", 
+                    border_radius=10, 
+                    text_size=13,
+                    content_padding=5,
+                    height=40,
+                    menu_height=300
+                ),
+                ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
+                ft.Icon(ft.Icons.REMOVE_RED_EYE_OUTLINED, size=18, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Text("Preview", color=ft.Colors.ON_SURFACE_VARIANT, size=13),
+                ft.Switch(ref=conv_preview_switch, value=True, active_color=ft.Colors.PRIMARY, scale=0.8),
+                ft.Icon(ref=conv_remove_bg_icon, icon=ft.Icons.FORMAT_COLOR_RESET_OUTLINED, size=18, color=ft.Colors.ON_SURFACE_VARIANT, visible=False),
+                ft.Text(ref=conv_remove_bg_text, value="Remove Black BG", color=ft.Colors.ON_SURFACE_VARIANT, size=13, visible=False),
+                ft.Switch(ref=conv_remove_bg_switch, value=False, active_color=ft.Colors.PRIMARY, scale=0.8, visible=False),
+            ], alignment=ft.MainAxisAlignment.START, spacing=10, wrap=False, vertical_alignment=ft.CrossAxisAlignment.CENTER),
         ], spacing=5),
         padding=10, 
         bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST, 
@@ -3008,7 +3016,7 @@ async def main(page: ft.Page):
             ft.Row([
                 ft.Container(expand=True),
                 ft.FilledButton(
-                    "Choose Output", 
+                    "Choose", 
                     icon=ft.Icons.DOWNLOAD_ROUNDED, 
                     on_click=merger_output_click, 
                     style=ft.ButtonStyle(
