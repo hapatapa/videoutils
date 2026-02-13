@@ -10,6 +10,9 @@ SUBPROCESS_FLAGS = 0
 if os.name == 'nt':
     SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW
 
+# Define for cross-platform safety (only used on Windows)
+CREATE_NEW_CONSOLE = 16
+
 def is_ffmpeg_installed():
     try:
         subprocess.run(['ffmpeg', '-version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=SUBPROCESS_FLAGS, check=True)
@@ -24,9 +27,9 @@ def install_ffmpeg(log_func=print):
         if system == "windows":
             log_func("🪟 Windows detected. Attempting install via winget...")
             # Using run instead of Popen for simplicity here, or Popen if we want to stream logs
-            process = subprocess.Popen(['winget', 'install', 'ffmpeg'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, creationflags=SUBPROCESS_FLAGS)
-            for line in process.stdout:
-                log_func(line.strip())
+            # Launch in a new visible console so user can accept terms/prompts
+            creation_flags = subprocess.CREATE_NEW_CONSOLE
+            process = subprocess.Popen(['winget', 'install', 'ffmpeg'], creationflags=creation_flags)
             process.wait()
             return process.returncode == 0
             

@@ -15,6 +15,9 @@ SUBPROCESS_FLAGS = 0
 if os.name == 'nt':
     SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW
 
+# Define for cross-platform safety (only used on Windows)
+CREATE_NEW_CONSOLE = 16
+
 async def main(page: ft.Page):
     # Set assets_dir to the assets folder directly
     page.assets_dir = os.path.join(os.path.dirname(__file__), "assets")
@@ -40,8 +43,8 @@ async def main(page: ft.Page):
     page.window.icon = "Icon.png"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
-    # --- FFmpeg Mandatory Check ---
-    if not logic.is_ffmpeg_installed():
+    # --- FFmpeg Installation Logic (Reusable) ---
+    def show_ffmpeg_modal():
         installing = False
         status_msg = ft.Text("This app requires FFmpeg to function.", color=ft.Colors.WHITE70)
         progress_ring = ft.ProgressRing(visible=False, width=16, height=16, stroke_width=2)
@@ -64,8 +67,25 @@ async def main(page: ft.Page):
             success = await loop.run_in_executor(None, run_install)
             
             if success:
-                page.close(ff_modal)
-                page.show_snack_bar(ft.SnackBar(ft.Text("FFmpeg installed successfully!"), bgcolor=ft.Colors.GREEN_700))
+                ff_modal.open = False
+                page.update()
+                
+                # Success Modal to restart
+                def close_app(e):
+                    page.window_close()
+
+                success_modal = ft.AlertDialog(
+                    modal=True,
+                    title=ft.Text("Installation Complete"),
+                    content=ft.Text("FFmpeg has been successfully installed.\n\nPlease restart the application for changes to take effect."),
+                    actions=[
+                        ft.TextButton("OK, Close App", on_click=close_app),
+                    ],
+                    actions_alignment=ft.MainAxisAlignment.END,
+                )
+                page.dialog = success_modal
+                success_modal.open = True
+                page.update()
             else:
                 installing = False
                 e.control.disabled = False
@@ -85,11 +105,40 @@ async def main(page: ft.Page):
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
-        page.open(ff_modal)
-        
+        page.overlay.append(ff_modal)
+        ff_modal.open = True
+        page.update()
+        return ff_modal
+
+    # --- Initial Check ---
+    if not logic.is_ffmpeg_installed():
+        ff_modal = show_ffmpeg_modal()
         # Wait until it's installed (modal closed)
-        while page.dialog == ff_modal:
-            await asyncio.sleep(0.5)
+        # Note: We can't block easily here without blocking the whole UI setup, 
+        # so we let the UI load behind it but disabled (modal=True does the trick visually)
+
+    # --- Konami Code Debug Trigger ---
+    konami_code = ["Arrow Up", "Arrow Up", "Arrow Down", "Arrow Down", "Arrow Left", "Arrow Right", "Arrow Left", "Arrow Right", "B", "A"]
+    key_buffer = []
+
+    def on_keyboard(e: ft.KeyboardEvent):
+        nonlocal key_buffer
+        key = e.key
+        
+        # Add to buffer
+        key_buffer.append(key)
+        
+        # Keep buffer size manageable
+        if len(key_buffer) > len(konami_code):
+            key_buffer.pop(0)
+            
+        # Check match
+        if key_buffer == konami_code:
+            print("👾 Konami Code Activated! Opening FFmpeg Installer...")
+            show_ffmpeg_modal()
+            key_buffer = [] # Reset
+
+    page.on_keyboard_event = on_keyboard
 
     # State
     input_display_field = ft.Ref[ft.TextField]()
