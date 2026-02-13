@@ -37,6 +37,7 @@ async def main(page: ft.Page):
     page.window.min_width = 1143
     page.window.min_height = 841
     page.window.resizable = True
+    page.window.icon = "Icon.png"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
     # --- FFmpeg Mandatory Check ---
@@ -2700,11 +2701,24 @@ async def main(page: ft.Page):
     page.add(
         ft.Container(
             content=ft.Column([
-                ft.Row([tab_bar], alignment=ft.MainAxisAlignment.CENTER),
+                # Branded Header (Tabs + Logo Overlay)
+                ft.Stack([
+                    ft.Row([tab_bar], alignment=ft.MainAxisAlignment.CENTER),
+                    ft.Container(
+                        content=ft.Image(
+                            src="Logo.svg",
+                            height=80,
+                            width=220,
+                            fit="contain",
+                        ),
+                        top=-24, # (36 - 100) / 2
+                        left=-10,
+                    )
+                ], height=TAB_HEIGHT, clip_behavior=ft.ClipBehavior.NONE),
+                
                 ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
                 
-                # Stack views or just Column with visibility
-                # View Stack to keep all views in memory (fixes lag)
+                # Main Views
                 ft.Stack([
                     compressor_view_col,
                     converter_view_col,
@@ -2712,7 +2726,7 @@ async def main(page: ft.Page):
                 ], expand=True)
             ], expand=True),
             expand=True,
-            padding=ft.Padding.only(left=20, right=20, bottom=20, top=5)
+            padding=ft.Padding.only(left=20, right=20, bottom=20, top=10)
         )
     )
 
