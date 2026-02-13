@@ -1,5 +1,6 @@
 <img width="529" height="500" alt="Group 2" src="https://github.com/user-attachments/assets/8a874ec3-f129-47a3-9c4f-15277fa72d52" />
-A Video Processing app made using Flet and FFmpeg
+
+## A Video Processing app made using Flet and FFmpeg
 
 # Features
   - Compress Videos
