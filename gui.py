@@ -1387,7 +1387,12 @@ async def main(page: ft.Page):
         content_row,
         ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
         controls_row
-    ], visible=True, expand=True)
+    ], 
+    visible=True, 
+    expand=True,
+    offset=ft.Offset(0, 0),
+    animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
+)
 
     # --- Converter UI Components ---
     
@@ -2652,7 +2657,12 @@ async def main(page: ft.Page):
         conv_content_row,
         ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
         conv_controls_row
-    ], visible=False, expand=True)
+    ], 
+    visible=True, 
+    expand=True,
+    offset=ft.Offset(1, 0),
+    animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
+)
 
     trimmer_view_col = ft.Column([
         trim_file_section,
@@ -2660,7 +2670,12 @@ async def main(page: ft.Page):
         trim_content_row,
         ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
         trim_controls_row
-    ], visible=False, expand=True) # Hidden initially
+    ], 
+    visible=True, 
+    expand=True,
+    offset=ft.Offset(2, 0),
+    animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
+)
 
     TAB_WIDTH = 135
     TAB_HEIGHT = 36
@@ -2705,11 +2720,20 @@ async def main(page: ft.Page):
                 tab_indicator.current.left = TAB_WIDTH * 2
             tab_indicator.current.update()
             
-        # Switch View
-        compressor_view_col.visible = (name == "compressor")
-        converter_view_col.visible = (name == "converter")
-        trimmer_view_col.visible = (name == "trimmer")
-        
+        # Switch View with Animation
+        if name == "compressor":
+            compressor_view_col.offset = ft.Offset(0, 0)
+            converter_view_col.offset = ft.Offset(1, 0)
+            trimmer_view_col.offset = ft.Offset(2, 0)
+        elif name == "converter":
+            compressor_view_col.offset = ft.Offset(-1, 0)
+            converter_view_col.offset = ft.Offset(0, 0)
+            trimmer_view_col.offset = ft.Offset(1, 0)
+        else:
+            compressor_view_col.offset = ft.Offset(-2, 0)
+            converter_view_col.offset = ft.Offset(-1, 0)
+            trimmer_view_col.offset = ft.Offset(0, 0)
+            
         compressor_view_col.update()
         converter_view_col.update()
         trimmer_view_col.update()
@@ -2731,7 +2755,7 @@ async def main(page: ft.Page):
                 bgcolor=ft.Colors.PRIMARY_CONTAINER,
                 border_radius=TAB_HEIGHT/2,
                 left=0,
-                animate_position=ft.Animation(400, ft.AnimationCurve.EASE_OUT_CUBIC)
+                animate_position=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
             ),
             # Labels Row
             ft.Row([
@@ -2776,29 +2800,23 @@ async def main(page: ft.Page):
     page.add(
         ft.Container(
             content=ft.Column([
-                # Branded Header (Tabs + Logo Overlay)
+                # Header (Centered Tabs)
                 ft.Stack([
                     ft.Row([tab_bar], alignment=ft.MainAxisAlignment.CENTER),
-                    ft.Container(
-                        content=ft.Image(
-                            src="Logo.svg",
-                            height=80,
-                            width=220,
-                            fit="contain",
-                        ),
-                        top=-24, # (36 - 100) / 2
-                        left=-10,
-                    )
                 ], height=TAB_HEIGHT, clip_behavior=ft.ClipBehavior.NONE),
                 
                 ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
                 
-                # Main Views
-                ft.Stack([
-                    compressor_view_col,
-                    converter_view_col,
-                    trimmer_view_col
-                ], expand=True)
+                # Main Views (Clipped Container for Slide Transition)
+                ft.Container(
+                    content=ft.Stack([
+                        compressor_view_col,
+                        converter_view_col,
+                        trimmer_view_col
+                    ]),
+                    expand=True,
+                    clip_behavior=ft.ClipBehavior.HARD_EDGE
+                )
             ], expand=True),
             expand=True,
             padding=ft.Padding.only(left=20, right=20, bottom=20, top=10)
