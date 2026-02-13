@@ -197,6 +197,14 @@ def get_encoder(codec_choice, use_gpu, log_func=print):
     except:
         return None
 
+def get_video_duration(input_file):
+    try:
+        cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', input_file]
+        dur = subprocess.check_output(cmd, encoding='utf-8', stderr=subprocess.DEVNULL, creationflags=SUBPROCESS_FLAGS)
+        return float(dur.strip())
+    except:
+        return 0
+
 def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, log_func=print, stop_event=None, preview_path=None, progress_callback=None, advanced_params=None):
     if stop_event and stop_event.is_set(): return False
 
@@ -574,3 +582,102 @@ def simple_convert(input_file, output_file, vcodec, acodec, log_func=print, prog
     except Exception as e:
         log_func(f"❌ Conversion Error: {e}")
         return False, None
+
+def merge_videos(video_paths, output_path, log_func=print, stop_event=None):
+    """
+    Merge multiple videos into one using the concat filter (re-encoding for compatibility).
+    """
+    if stop_event and stop_event.is_set():
+        return False, "Process cancelled"
+
+    if not video_paths:
+        log_func("❌ No videos to merge.")
+        return False, "No videos selected"
+
+    if len(video_paths) == 1:
+        log_func("⚠️ Only one video selected. Copying to output...")
+        try:
+            import shutil
+            shutil.copy2(video_paths[0], output_path)
+            return True, output_path
+        except Exception as e:
+            return False, str(e)
+
+    # Build Filter Complex
+    # We must normalize all inputs to the same resolution, SAR, and framerate for the concat filter to work reliably.
+    inputs = []
+    filter_complex = ""
+    
+    # Target 1080p, 30fps, 16:9 for maximum compatibility
+    w = 1920
+    h = 1080
+    fps = 30
+    
+    for i in range(len(video_paths)):
+        inputs.extend(["-i", video_paths[i]])
+        # Scale each video to target w:h, forcing SAR 1:1, and setting generic PTS
+        # We use force_original_aspect_ratio=decrease and pad to keep aspect ratio without stretching
+        filter_complex += (
+            f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,"
+            f"setsar=1,fps={fps},format=yuv420p[v{i}];"
+            f"[{i}:a]aformat=sample_rates=44100:channel_layouts=stereo[a{i}];"
+        )
+    
+    # Concat block
+    for i in range(len(video_paths)):
+        filter_complex += f"[v{i}][a{i}]"
+    
+    filter_complex += f"concat=n={len(video_paths)}:v=1:a=1[outv][outa]"
+
+    # Try to use GPU encoder, fallback to software
+    video_encoder = get_encoder("h264", use_gpu=True, log_func=log_func)
+    
+    cmd = [
+        "ffmpeg", "-y"
+    ]
+    cmd.extend(inputs)
+    cmd.extend([
+        "-filter_complex", filter_complex,
+        "-map", "[outv]",
+        "-map", "[outa]",
+        "-c:v", video_encoder,
+        "-preset", "fast",
+        "-crf", "23",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-movflags", "+faststart",
+        output_path
+    ])
+
+    log_func(f"🚀 Starting merge of {len(video_paths)} files...")
+    
+    try:
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+            creationflags=SUBPROCESS_FLAGS
+        )
+
+        for line in process.stdout:
+            # Check for stop signal
+            if stop_event and stop_event.is_set():
+                process.terminate()
+                log_func("🛑 Process stopped by user.")
+                return False, "Cancelled"
+
+            if "frame=" in line or "time=" in line:
+                log_func(line.strip(), replace_last=True)
+            else:
+                log_func(line.strip())
+
+        process.wait()
+        
+        if process.returncode == 0:
+            return True, output_path
+        else:
+            return False, "FFmpeg process failed"
+            
+    except Exception as e:
+        return False, str(e)

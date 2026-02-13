@@ -206,6 +206,16 @@ async def main(page: ft.Page):
         conv_progress_fill.current.width = bar_max_w * pct
         conv_progress_fill.current.update()
 
+    def update_merger_progress_bar(pct):
+        if not merger_progress_fill.current or not page.window.width: return
+        prev_w = 400 # Fixed width for merger preview side
+        available_w = page.window.width - 40
+        if prev_w > 0: available_w -= (20 + prev_w)
+        bar_max_w = available_w - 30
+        if bar_max_w < 0: bar_max_w = 0
+        merger_progress_fill.current.width = bar_max_w * pct
+        merger_progress_fill.current.update()
+
     maxrate_input = ft.Ref[ft.TextField]()
     keyframe_input = ft.Ref[ft.TextField]()
     
@@ -222,6 +232,24 @@ async def main(page: ft.Page):
     compress_btn = ft.Ref[ft.FilledButton]()
     stop_btn = ft.Ref[ft.OutlinedButton]()
     btn_text = ft.Ref[ft.Text]()
+    
+    # Merger Refs
+    merger_segments_list = ft.Ref[ft.Column]()
+    merger_player_container = ft.Ref[ft.Container]()
+    merger_placeholder_img = ft.Ref[ft.Image]()
+    merger_preview_container = ft.Ref[ft.Container]()
+    merger_output_field = ft.Ref[ft.TextField]()
+    merger_video_player = ft.Ref()
+    merger_status_text = ft.Ref[ft.Text]()
+    merger_progress_fill = ft.Ref[ft.Container]()
+    merger_progress_container = ft.Ref[ft.Container]()
+    merger_stop_btn = ft.Ref[ft.FilledButton]()
+    merger_pct_text = ft.Ref[ft.Text]()
+    
+    merger_progress_wrapper = ft.Ref[ft.Container]()
+    
+    trim_stop_btn = ft.Ref[ft.FilledButton]()
+    trim_stop_event = threading.Event()
     
     selected_file_paths = []  # List of input file paths for batch processing
     target_output_path = None  # Can be a folder (for batch) or file (for single)
@@ -1371,9 +1399,11 @@ async def main(page: ft.Page):
     tab_compressor_text = ft.Ref[ft.Text]()
     tab_converter_text = ft.Ref[ft.Text]()
     tab_trimmer_text = ft.Ref[ft.Text]()
+    tab_merger_text = ft.Ref[ft.Text]()
     tab_compressor_icon = ft.Ref[ft.Icon]()
     tab_converter_icon = ft.Ref[ft.Icon]()
     tab_trimmer_icon = ft.Ref[ft.Icon]()
+    tab_merger_icon = ft.Ref[ft.Icon]()
     view_switcher = ft.Ref[ft.AnimatedSwitcher]()
     
     # --- Animated Views ---
@@ -2218,10 +2248,19 @@ async def main(page: ft.Page):
         except Exception as ex:
             log(f"Error loading video: {ex}")
 
-
+    def stop_trimming(e):
+        nonlocal trim_is_running
+        trim_stop_event.set()
+        trim_is_running = False
+        if trim_stop_btn.current:
+            trim_stop_btn.current.disabled = True
+            trim_stop_btn.current.update()
+        log("🛑 Stopping trim...")
 
     async def run_trimming():
         nonlocal trim_is_running
+        trim_stop_event.clear()
+        
         if not trim_file_paths or not trim_target_path:
             return
         if len(trim_segments) == 0:
@@ -2229,6 +2268,9 @@ async def main(page: ft.Page):
             return
         
         trim_is_running = True
+        if trim_stop_btn.current:
+            trim_stop_btn.current.disabled = False
+            trim_stop_btn.current.update()
         input_path = trim_file_paths[0]
         output_path = trim_target_path
         
@@ -2297,6 +2339,14 @@ async def main(page: ft.Page):
                 base_dir = os.path.dirname(output_path) if output_path else os.getcwd()
                 
                 for idx, seg in enumerate(keep_segments):
+                    if trim_stop_event.is_set():
+                        log("🛑 Trim cancelled.")
+                        # Clean up
+                        for tf in temp_files:
+                            try: os.remove(tf)
+                            except: pass
+                        return
+
                     start_time = seg["start"]
                     end_time = seg["end"]
                     temp_out = os.path.join(base_dir, f"_keep_temp_{idx}.mp4")
@@ -2350,6 +2400,9 @@ async def main(page: ft.Page):
                 log(f"❌ Error: {ex}")
             finally:
                 trim_is_running = False
+                if trim_stop_btn.current:
+                    trim_stop_btn.current.disabled = True
+                    trim_stop_btn.current.update()
                 
                 # Hide processing overlay with fade
                 if trim_processing_overlay.current:
@@ -2647,6 +2700,19 @@ async def main(page: ft.Page):
                 bgcolor={ft.ControlState.DEFAULT: ft.Colors.PRIMARY}, 
                 color={ft.ControlState.DEFAULT: ft.Colors.ON_PRIMARY}
             )
+        ),
+        ft.OutlinedButton(
+            ref=trim_stop_btn,
+            content="Stop",
+            icon=ft.Icons.STOP_CIRCLE_OUTLINED,
+            style=ft.ButtonStyle(
+                padding=15,
+                color={ft.ControlState.DEFAULT: ft.Colors.RED_400},
+                shape=ft.RoundedRectangleBorder(radius=10),
+                side={ft.ControlState.DEFAULT: ft.BorderSide(1, ft.Colors.RED_400)}
+            ), 
+            on_click=stop_trimming, 
+            disabled=True
         )
     ], spacing=15)
 
@@ -2674,6 +2740,452 @@ async def main(page: ft.Page):
     visible=True, 
     expand=True,
     offset=ft.Offset(2, 0),
+    animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
+)
+
+    # --- Merger UI (Implementation) ---
+    merger_segments = []
+    merger_target_path = None
+    
+    merger_picker = ft.FilePicker()
+    merger_save_picker = ft.FilePicker()
+
+    async def pick_merger_file(idx):
+        res = await merger_picker.pick_files(allow_multiple=False)
+        if res and len(res) > 0:
+            merger_segments[idx]["path"] = res[0].path
+            rebuild_merger_segments_list()
+
+    def delete_merger_segment(idx):
+        if 0 <= idx < len(merger_segments):
+            merger_segments.pop(idx)
+            rebuild_merger_segments_list()
+
+    def move_merger_segment(idx, direction):
+        new_idx = idx + direction
+        if 0 <= new_idx < len(merger_segments):
+            merger_segments[idx], merger_segments[new_idx] = merger_segments[new_idx], merger_segments[idx]
+            rebuild_merger_segments_list()
+
+    async def play_merger_segment(idx):
+        if not merger_segments or idx >= len(merger_segments): return
+        path = merger_segments[idx].get("path")
+        if not path or not os.path.exists(path): return
+        
+        # merger_log(f"📽️ Loading segment preview: {os.path.basename(path)}")
+        
+        try:
+            # Hide placeholder
+            if merger_placeholder_img.current:
+                merger_placeholder_img.current.opacity = 0
+                merger_placeholder_img.current.update()
+                
+            # Replacing Video control (mirroring Trimmer strategy)
+            if merger_player_container.current and isinstance(merger_player_container.current.content, ft.Stack):
+                stack = merger_player_container.current.content
+                
+                # Create fresh Video control
+                new_player = Video(
+                    ref=merger_video_player,
+                    expand=True,
+                    autoplay=True,
+                    playlist=[VideoMedia(path)],
+                    playlist_mode=PlaylistMode.SINGLE,
+                    aspect_ratio=16/9,
+                    volume=100,
+                    filter_quality=ft.FilterQuality.HIGH,
+                )
+                
+                video_container = ft.Container(
+                    content=new_player,
+                    alignment=ft.Alignment.CENTER,
+                    expand=True,
+                    opacity=0,
+                    animate_opacity=400
+                )
+                
+                # Replace the player layer (index 1)
+                stack.controls[1] = video_container
+                merger_player_container.current.update()
+                
+                await asyncio.sleep(0.05)
+                video_container.opacity = 1
+                video_container.update()
+
+        except Exception as ex:
+            merger_log(f"❌ Preview Error: {ex}")
+
+    merger_stop_event = threading.Event()
+
+    def stop_merger(e):
+        merger_stop_event.set()
+        if merger_stop_btn.current:
+            merger_stop_btn.current.disabled = True
+            merger_stop_btn.current.update()
+        merger_log("🛑 Stopping merge...")
+
+    async def run_merger(e):
+        if not merger_segments:
+            merger_log("❌ Merge Queue is empty!")
+            return
+            
+        # Validate all segments have paths
+        video_paths = [s["path"] for s in merger_segments if s.get("path")]
+        if len(video_paths) < len(merger_segments):
+            merger_log("❌ Some segments are missing files!")
+            return
+
+        if not merger_target_path:
+            # Prompt to choose output
+            await merger_output_click(None)
+            if not merger_target_path: return
+
+        # Log and start
+        merger_log("🎬 Starting Merger...")
+        
+        merger_stop_event.clear()
+        
+        # Show progress wrapper
+        if merger_progress_wrapper.current:
+            merger_progress_wrapper.current.height = 75
+            merger_progress_wrapper.current.opacity = 1
+            merger_progress_wrapper.current.update()
+        
+        btn = e.control
+        btn.disabled = True
+        btn.update()
+        
+        if merger_stop_btn.current:
+            merger_stop_btn.current.disabled = False
+            merger_stop_btn.current.update()
+        
+        # Reset progress bar
+        update_merger_progress_bar(0)
+        
+        nonlocal merger_start_time
+        merger_start_time = time.time()
+        
+        def do_merge():
+            try:
+                success, result = logic.merge_videos(video_paths, merger_target_path, merger_log, stop_event=merger_stop_event)
+                if success:
+                    merger_log(f"✨ MERGE SUCCESS: {result}")
+                else:
+                    merger_log(f"❌ MERGE FAILED: {result}")
+            finally:
+                btn.disabled = False
+                btn.update()
+                if merger_stop_btn.current:
+                    merger_stop_btn.current.disabled = True
+                    merger_stop_btn.current.update()
+                
+                # Hide progress wrapper after delay
+                def hide_progress():
+                    time.sleep(3.0)
+                    if merger_progress_wrapper.current:
+                        merger_progress_wrapper.current.opacity = 0
+                        merger_progress_wrapper.current.height = 0
+                        merger_progress_wrapper.current.update()
+                threading.Thread(target=hide_progress, daemon=True).start()
+            
+        threading.Thread(target=do_merge, daemon=True).start()
+
+    merger_total_duration = 0 # Store total duration of all segments
+    merger_start_time = 0
+
+    def merger_log(msg, replace_last=False):
+        # Check if this is a progress line
+        if "time=" in msg and "frame=" in msg:
+            # Parse time
+             try:
+                import re
+                match = re.search(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})", msg)
+                if match and merger_total_duration > 0:
+                    t_str = match.group(1)
+                    parts = t_str.split(':')
+                    secs = float(parts[0])*3600 + float(parts[1])*60 + float(parts[2])
+                    
+                    pct = 0
+                    if merger_total_duration > 0:
+                        pct = min(secs / merger_total_duration, 1.0)
+                    
+                    update_merger_progress_bar(pct)
+                    
+                    # Update percentage text
+                    if merger_pct_text.current:
+                        merger_pct_text.current.value = f"{int(pct*100)}%"
+                        merger_pct_text.current.update()
+                    
+                    # Update time remaining text
+                    if merger_status_text.current:
+                        eta_str = "---"
+                        if pct > 0.01 and merger_start_time > 0: # Wait for 1% progress for better estimate
+                            elapsed = time.time() - merger_start_time
+                            total_est = elapsed / pct
+                            remaining = total_est - elapsed
+                            if remaining < 0: remaining = 0
+                            
+                            m, s = divmod(int(remaining), 60)
+                            h, m = divmod(m, 60)
+                            if h > 0:
+                                eta_str = f"{h:02d}:{m:02d}:{s:02d}"
+                            else:
+                                eta_str = f"{m:02d}:{s:02d}"
+                        
+                        merger_status_text.current.value = eta_str
+                        merger_status_text.current.update()
+             except: pass
+        else:
+            # For non-progress messages, show in status text only if it's a user message
+            if "frame=" not in msg:
+                print(msg)
+
+    def build_merger_card(idx):
+        seg = merger_segments[idx]
+        file_path = seg.get("path", "")
+        file_name = os.path.basename(file_path) if file_path else "No file selected"
+        
+        return ft.Container(
+            content=ft.Row([
+                ft.Text(str(idx + 1), size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY, width=30),
+                ft.Row([
+                    ft.Icon(ft.Icons.VIDEO_FILE_ROUNDED, size=20, color=ft.Colors.ON_SURFACE_VARIANT),
+                    ft.Text(file_name, size=14, weight=ft.FontWeight.W_500, expand=True, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS),
+                ], expand=True, spacing=10),
+                ft.Row([
+                    ft.IconButton(ft.Icons.PLAY_CIRCLE_OUTLINE_ROUNDED, icon_size=18, tooltip="Preview", on_click=lambda _: page.run_task(play_merger_segment, idx)),
+                    ft.IconButton(ft.Icons.FOLDER_OPEN_ROUNDED, icon_size=18, tooltip="Change file", on_click=lambda _: page.run_task(pick_merger_file, idx)),
+                    ft.IconButton(ft.Icons.ARROW_UPWARD_ROUNDED, icon_size=18, tooltip="Move up", on_click=lambda _: move_merger_segment(idx, -1), disabled=(idx == 0)),
+                    ft.IconButton(ft.Icons.ARROW_DOWNWARD_ROUNDED, icon_size=18, tooltip="Move down", on_click=lambda _: move_merger_segment(idx, 1), disabled=(idx == len(merger_segments)-1)),
+                    ft.IconButton(ft.Icons.DELETE_ROUNDED, icon_size=18, icon_color=ft.Colors.RED_400, tooltip="Remove", on_click=lambda _: delete_merger_segment(idx)),
+                ], spacing=0)
+            ], alignment=ft.MainAxisAlignment.START),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border_radius=12,
+            border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
+            padding=ft.Padding(left=15, right=5, top=5, bottom=5),
+            margin=ft.Margin.only(bottom=8),
+            animate=ft.Animation(300, ft.AnimationCurve.EASE_OUT)
+        )
+
+    def rebuild_merger_segments_list():
+        if not merger_segments_list.current: return
+        
+        # Calculate total duration
+        nonlocal merger_total_duration
+        merger_total_duration = 0
+        for seg in merger_segments:
+            p = seg.get("path")
+            if p and os.path.exists(p):
+                merger_total_duration += logic.get_video_duration(p)
+
+        controls = []
+        for idx in range(len(merger_segments)):
+            controls.append(build_merger_card(idx))
+        if len(merger_segments) == 0:
+            controls.append(ft.Container(content=ft.Text("Click + to add videos to merge", size=14, color=ft.Colors.ON_SURFACE_VARIANT, italic=True), alignment=ft.Alignment.CENTER, padding=30))
+        merger_segments_list.current.controls = controls
+        merger_segments_list.current.update()
+
+    async def add_merger_segment(_=None):
+        res = await merger_picker.pick_files(allow_multiple=True)
+        if res:
+            for f in res:
+                merger_segments.append({"path": f.path})
+            rebuild_merger_segments_list()
+
+    async def merger_output_click(e):
+        path = await merger_save_picker.save_file(file_name="merged.mp4")
+        if path:
+            nonlocal merger_target_path
+            merger_target_path = path
+            merger_output_field.current.value = os.path.basename(path)
+            merger_output_field.current.update()
+
+    # --- Merger UI Layout ---
+    merger_file_section = ft.Container(
+        content=ft.Column([
+            ft.Row([
+                ft.Container(expand=True),
+                ft.FilledButton(
+                    "Choose Output", 
+                    icon=ft.Icons.DOWNLOAD_ROUNDED, 
+                    on_click=merger_output_click, 
+                    style=ft.ButtonStyle(
+                        padding=10, 
+                        shape=ft.RoundedRectangleBorder(radius=30),
+                        bgcolor=ft.Colors.PRIMARY, 
+                        color=ft.Colors.ON_PRIMARY
+                    )
+                )
+            ], spacing=5),
+            ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+            ft.Row([
+                ft.Container(
+                    content=ft.TextField(
+                        ref=merger_output_field, 
+                        label="Output", 
+                        read_only=True, 
+                        border_color=ft.Colors.OUTLINE, 
+                        border_radius=12, 
+                        text_size=14, 
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        height=40,
+                        content_padding=10
+                    ), 
+                    expand=True
+                )
+            ], spacing=10)
+        ]),
+        padding=0, 
+        margin=ft.Margin.only(bottom=5)
+    )
+
+    merger_segments_scrollable = ft.Container(
+        content=ft.Column(ref=merger_segments_list, controls=[ft.Container(content=ft.Text("Click + to add videos to merge", size=14, color=ft.Colors.ON_SURFACE_VARIANT, italic=True), alignment=ft.Alignment.CENTER, padding=30)], scroll=ft.ScrollMode.AUTO),
+        expand=True, bgcolor=ft.Colors.BLACK_26, border_radius=15, border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT), padding=15
+    )
+
+    merger_left_side = ft.Container(
+        content=ft.Column([
+            ft.Container(
+                content=ft.Row([
+                    ft.Icon(ft.Icons.VIDEO_LIBRARY_ROUNDED, color=ft.Colors.PRIMARY, size=20), 
+                    ft.Text("Videos to Merge", size=16, weight=ft.FontWeight.W_900), 
+                    ft.Container(expand=True),
+                    ft.IconButton(
+                        icon=ft.Icons.ADD_CIRCLE_ROUNDED,
+                        icon_color=ft.Colors.PRIMARY,
+                        icon_size=24,
+                        tooltip="Add Video(s)",
+                        on_click=add_merger_segment
+                    )
+                ], vertical_alignment=ft.CrossAxisAlignment.CENTER), 
+                padding=ft.Padding.only(bottom=10)
+            ),
+            merger_segments_scrollable,
+            ft.Container(
+                content=ft.Column([
+                    ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+                    ft.Row([
+                        ft.Text("Time remaining : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Text("---", ref=merger_status_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                        ft.VerticalDivider(width=20, color=ft.Colors.TRANSPARENT),
+                        ft.Text("Percentage : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Text("0%", ref=merger_pct_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                    ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    ft.Container(
+                        ref=merger_progress_container,
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        height=6,
+                        border_radius=3,
+                        alignment=ft.Alignment.CENTER_LEFT,
+                        clip_behavior=ft.ClipBehavior.HARD_EDGE,
+                        content=ft.Container(
+                            ref=merger_progress_fill,
+                            width=0,
+                            bgcolor=ft.Colors.PRIMARY,
+                            height=6,
+                            animate=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
+                        )
+                    )
+                ], spacing=10),
+                ref=merger_progress_wrapper,
+                opacity=0, 
+                height=0,
+                animate_opacity=ft.Animation(400, ft.AnimationCurve.EASE_OUT),
+                animate=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO),
+                clip_behavior=ft.ClipBehavior.HARD_EDGE
+            )
+        ], expand=True),
+        expand=True
+    )
+
+    merger_preview_side = ft.Container(
+        bgcolor=ft.Colors.BLACK_26, 
+        border_radius=15, 
+        border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT), 
+        padding=15, 
+        width=400, 
+        clip_behavior=ft.ClipBehavior.HARD_EDGE,
+        content=ft.Column([
+            ft.Row([ft.Icon(ft.Icons.PLAY_CIRCLE_FILLED_ROUNDED, size=20, color=ft.Colors.PRIMARY), ft.Text("Preview", size=18, weight=ft.FontWeight.W_900)], spacing=10),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+            ft.Container(
+                ref=merger_player_container, 
+                content=ft.Stack([
+                    # Placeholder
+                    ft.Container(
+                        ref=merger_placeholder_img, 
+                        content=ft.Image(src="placeholder.png", fit=ft.BoxFit.COVER, expand=True), 
+                        opacity=1, 
+                        animate_opacity=400,
+                        alignment=ft.Alignment.CENTER, 
+                        expand=True
+                    ),
+                    # Video Player
+                    ft.Container(
+                        content=Video(
+                            ref=merger_video_player,
+                            expand=True,
+                            autoplay=False,
+                            playlist=[],
+                            playlist_mode=PlaylistMode.SINGLE,
+                            aspect_ratio=16/9,
+                            opacity=0,
+                            animate_opacity=400
+                        ),
+                        alignment=ft.Alignment.CENTER,
+                        expand=True
+                    )
+                ], expand=True, alignment=ft.Alignment.CENTER), 
+                expand=True, 
+                bgcolor=ft.Colors.BLACK_12, 
+                border_radius=12, 
+                clip_behavior=ft.ClipBehavior.HARD_EDGE
+            )
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, expand=True)
+    )
+
+    merger_content_row = ft.Row([merger_left_side, ft.Container(ref=merger_preview_container, content=merger_preview_side, width=400, visible=True, clip_behavior=ft.ClipBehavior.HARD_EDGE)], spacing=20, expand=True)
+
+    merger_view_col = ft.Column([
+        merger_file_section,
+        ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
+        merger_content_row,
+        ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+        ft.Column([
+            ft.Row([
+                ft.FilledButton(
+                    content=ft.Row([ft.Icon(ft.Icons.MERGE_ROUNDED), ft.Text("Merge Videos", size=16, weight=ft.FontWeight.W_900)], alignment=ft.MainAxisAlignment.CENTER, spacing=10), 
+                    on_click=run_merger, 
+                    expand=True, 
+                    style=ft.ButtonStyle(
+                        padding=15, 
+                        shape=ft.RoundedRectangleBorder(radius=10), 
+                        bgcolor={ft.ControlState.DEFAULT: ft.Colors.PRIMARY}, 
+                        color={ft.ControlState.DEFAULT: ft.Colors.ON_PRIMARY}
+                    )
+                ),
+                ft.OutlinedButton(
+                    ref=merger_stop_btn,
+                    content="Stop",
+                    icon=ft.Icons.STOP_CIRCLE_OUTLINED,
+                    style=ft.ButtonStyle(
+                        padding=15,
+                        color={ft.ControlState.DEFAULT: ft.Colors.RED_400},
+                        shape=ft.RoundedRectangleBorder(radius=10),
+                        side={ft.ControlState.DEFAULT: ft.BorderSide(1, ft.Colors.RED_400)}
+                    ), 
+                    on_click=stop_merger, 
+                    disabled=True
+                )
+            ], spacing=15)
+        ], spacing=10)
+    ], 
+    visible=True, 
+    expand=True,
+    offset=ft.Offset(3, 0),
     animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
 )
 
@@ -2705,6 +3217,14 @@ async def main(page: ft.Page):
             tab_trimmer_text.current.update()
             tab_trimmer_icon.current.update()
 
+        if tab_merger_text.current:
+            is_active = (current_tab == "merger")
+            c = ft.Colors.ON_PRIMARY_CONTAINER if is_active else ft.Colors.ON_SURFACE_VARIANT
+            tab_merger_text.current.color = c
+            tab_merger_icon.current.color = c
+            tab_merger_text.current.update()
+            tab_merger_icon.current.update()
+
     def set_tab(name):
         nonlocal current_tab
         if current_tab == name: return
@@ -2716,8 +3236,10 @@ async def main(page: ft.Page):
                 tab_indicator.current.left = 0
             elif name == "converter":
                 tab_indicator.current.left = TAB_WIDTH
-            else:
+            elif name == "trimmer":
                 tab_indicator.current.left = TAB_WIDTH * 2
+            else:
+                tab_indicator.current.left = TAB_WIDTH * 3
             tab_indicator.current.update()
             
         # Switch View with Animation
@@ -2725,18 +3247,27 @@ async def main(page: ft.Page):
             compressor_view_col.offset = ft.Offset(0, 0)
             converter_view_col.offset = ft.Offset(1, 0)
             trimmer_view_col.offset = ft.Offset(2, 0)
+            merger_view_col.offset = ft.Offset(3, 0)
         elif name == "converter":
             compressor_view_col.offset = ft.Offset(-1, 0)
             converter_view_col.offset = ft.Offset(0, 0)
             trimmer_view_col.offset = ft.Offset(1, 0)
-        else:
+            merger_view_col.offset = ft.Offset(2, 0)
+        elif name == "trimmer":
             compressor_view_col.offset = ft.Offset(-2, 0)
             converter_view_col.offset = ft.Offset(-1, 0)
             trimmer_view_col.offset = ft.Offset(0, 0)
+            merger_view_col.offset = ft.Offset(1, 0)
+        else:
+            compressor_view_col.offset = ft.Offset(-3, 0)
+            converter_view_col.offset = ft.Offset(-2, 0)
+            trimmer_view_col.offset = ft.Offset(-1, 0)
+            merger_view_col.offset = ft.Offset(0, 0)
             
         compressor_view_col.update()
         converter_view_col.update()
         trimmer_view_col.update()
+        merger_view_col.update()
         
         update_tabs()
 
@@ -2744,7 +3275,7 @@ async def main(page: ft.Page):
         bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.SURFACE_CONTAINER_HIGHEST),
         border_radius=TAB_HEIGHT/2,
         padding=0,
-        width=TAB_WIDTH * 3,
+        width=TAB_WIDTH * 4,
         height=TAB_HEIGHT,
         content=ft.Stack([
             # Animated Pill
@@ -2791,6 +3322,17 @@ async def main(page: ft.Page):
                     alignment=ft.Alignment.CENTER,
                     on_click=lambda _: set_tab("trimmer"),
                     border_radius=TAB_HEIGHT/2,
+                ),
+                ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.MERGE_ROUNDED, ref=tab_merger_icon, size=16, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Text("Merger", ref=tab_merger_text, weight=ft.FontWeight.W_600, size=13, color=ft.Colors.ON_SURFACE_VARIANT)
+                    ], spacing=6, alignment=ft.MainAxisAlignment.CENTER),
+                    width=TAB_WIDTH,
+                    height=TAB_HEIGHT,
+                    alignment=ft.Alignment.CENTER,
+                    on_click=lambda _: set_tab("merger"),
+                    border_radius=TAB_HEIGHT/2,
                 )
             ], spacing=0)
         ]),
@@ -2812,7 +3354,8 @@ async def main(page: ft.Page):
                     content=ft.Stack([
                         compressor_view_col,
                         converter_view_col,
-                        trimmer_view_col
+                        trimmer_view_col,
+                        merger_view_col
                     ]),
                     expand=True,
                     clip_behavior=ft.ClipBehavior.HARD_EDGE

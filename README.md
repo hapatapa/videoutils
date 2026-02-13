@@ -6,6 +6,7 @@
   - Compress Videos
   - Convert Videos to other formats and even to audio
   - Trim Parts of Videos without re-encoding
+  - Merge Multiple Videos into one file
 
 # Usage
   - Simply run the executable, if FFmpeg is not found, the app will help you with installation.
