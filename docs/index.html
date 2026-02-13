@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" style="scroll-behavior: smooth;">
 
 <head>
     <meta charset="UTF-8">
@@ -291,22 +291,17 @@
             margin-top: 64px;
             display: flex;
             justify-content: center;
-            perspective: 1000px;
+            perspective: 1500px;
         }
 
         .hero-image {
-            border-radius: var(--md-sys-radius-extra-large);
-            border: 8px solid var(--md-sys-color-surface-container);
-            box-shadow: var(--md-sys-elevation-3);
-            max-width: 900px;
+            max-width: 1000px;
             width: 100%;
             height: auto;
-            transform: rotateX(2deg);
-            transition: transform 0.5s ease;
-        }
-
-        .hero-image:hover {
-            transform: rotateX(0deg);
+            transition: transform 0.1s ease-out;
+            transform-style: preserve-3d;
+            will-change: transform;
+            cursor: pointer;
         }
 
         /* Cards Layout - Masonry/Grid */
@@ -430,13 +425,9 @@
                     Compress, convert, and trim your videos. That's basically it.
                 </p>
                 <div style="display: flex; gap: 16px; justify-content: center; margin-top: 32px;">
-                    <a href="#download" class="btn btn-filled label-large">
+                    <a href="#download" class="btn btn-filled label-large" style="padding: 0 40px;">
                         <span class="material-symbols-rounded">download</span>
-                        Download for Linux
-                    </a>
-                    <a href="#download" class="btn btn-tonal label-large">
-                        <span class="material-symbols-rounded">window</span>
-                        Download for Windows
+                        Download Now
                     </a>
                 </div>
 
@@ -586,6 +577,68 @@
             </div>
         </section>
 
+        <!-- Download Section -->
+        <section id="download" class="features-section"
+            style="background-color: var(--md-sys-color-surface-container-low); margin-top: 40px; padding: 100px 0;">
+            <div class="container" style="text-align: center;">
+                <h2 class="display-medium" style="margin-bottom: 16px;">Download Video Utilities</h2>
+                <p class="body-large"
+                    style="color: var(--md-sys-color-on-surface-variant); margin-bottom: 64px; max-width: 600px; margin-left: auto; margin-right: auto;">
+                    Latest version: <span class="chip"
+                        style="margin-top: 0; padding: 4px 12px; color: var(--md-sys-color-primary);">v35</span>
+                </p>
+
+                <div class="features-grid" style="grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));">
+                    <!-- Linux Card -->
+                    <div class="card"
+                        style="text-align: left; background-color: var(--md-sys-color-surface-container);">
+                        <div style="display: flex; align-items: center; gap: 16px;">
+                            <div class="card-icon-container">
+                                <span class="material-symbols-rounded">desktop_windows</span>
+                            </div>
+                            <h3 class="headline-medium">Linux</h3>
+                        </div>
+                        <p class="body-large" style="color: var(--md-sys-color-on-surface-variant);">
+                            Choose the .run file for easy execution, or the archive if you have trouble with extraction.
+                        </p>
+                        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
+                            <a href="https://github.com/hapatapa/videoutils/releases/download/v35/VideoUtilities-Linux.run"
+                                download="VideoUtilities-Linux.run" class="btn btn-filled label-large">
+                                <span class="material-symbols-rounded">bolt</span>
+                                Download .run (Recommended)
+                            </a>
+                            <a href="https://github.com/hapatapa/videoutils/releases/download/v35/VideoUtilities-Linux-Native.tar.gz"
+                                download="VideoUtilities-Linux-Native.tar.gz" class="btn btn-outlined label-large">
+                                <span class="material-symbols-rounded">folder_zip</span>
+                                Download Zip (.tar.gz)
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Windows Card -->
+                    <div class="card"
+                        style="text-align: left; background-color: var(--md-sys-color-surface-container);">
+                        <div style="display: flex; align-items: center; gap: 16px;">
+                            <div class="card-icon-container">
+                                <span class="material-symbols-rounded">window</span>
+                            </div>
+                            <h3 class="headline-medium">Windows</h3>
+                        </div>
+                        <p class="body-large" style="color: var(--md-sys-color-on-surface-variant);">
+                            Standalone executable for Windows 10/11. No installation required.
+                        </p>
+                        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
+                            <a href="https://github.com/hapatapa/videoutils/releases/download/v35/VideoUtilities-Windows.exe"
+                                download="VideoUtilities-Windows.exe" class="btn btn-filled label-large">
+                                <span class="material-symbols-rounded">download</span>
+                                Download for Windows (.exe)
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
     </main>
 
     <footer id="download">
@@ -605,6 +658,30 @@
         </div>
     </footer>
 
+    <script>
+        const heroImage = document.querySelector('.hero-image');
+        const container = document.querySelector('.hero-graphics-container');
+
+        if (heroImage && container) {
+            container.addEventListener('mousemove', (e) => {
+                const rect = heroImage.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+
+                const rotateX = ((y - centerY) / centerY) * 10;
+                const rotateY = ((centerX - x) / centerX) * 10;
+
+                heroImage.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+            });
+
+            container.addEventListener('mouseleave', () => {
+                heroImage.style.transform = `rotateX(0deg) rotateY(0deg)`;
+            });
+        }
+    </script>
 </body>
 
 </html>
