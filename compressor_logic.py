@@ -28,7 +28,7 @@ def install_ffmpeg(log_func=print):
             log_func("🪟 Windows detected. Attempting install via winget...")
             # Using run instead of Popen for simplicity here, or Popen if we want to stream logs
             # Launch in a new visible console so user can accept terms/prompts
-            creation_flags = subprocess.CREATE_NEW_CONSOLE
+            creation_flags = CREATE_NEW_CONSOLE
             process = subprocess.Popen(['winget', 'install', 'ffmpeg'], creationflags=creation_flags)
             process.wait()
             return process.returncode == 0

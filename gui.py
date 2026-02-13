@@ -45,6 +45,15 @@ async def main(page: ft.Page):
 
     # --- FFmpeg Installation Logic (Reusable) ---
     def show_ffmpeg_modal():
+        # Check if already open
+        for control in page.overlay:
+            if isinstance(control, ft.AlertDialog) and \
+               isinstance(control.title, ft.Text) and \
+               control.title.value == "FFmpeg Not Found":
+                control.open = True
+                page.update()
+                return control
+
         installing = False
         status_msg = ft.Text("This app requires FFmpeg to function.", color=ft.Colors.WHITE70)
         progress_ring = ft.ProgressRing(visible=False, width=16, height=16, stroke_width=2)
@@ -83,7 +92,7 @@ async def main(page: ft.Page):
                     ],
                     actions_alignment=ft.MainAxisAlignment.END,
                 )
-                page.dialog = success_modal
+                page.overlay.append(success_modal)
                 success_modal.open = True
                 page.update()
             else:
@@ -825,14 +834,10 @@ async def main(page: ft.Page):
             "keyframe": keyframe_input.current.value
         }
 
-        compress_btn.current.disabled = True
-        stop_btn.current.disabled = False
-        btn_text.current.value = f"Compressing... (0/{len(selected_file_paths)})"
+        if compress_btn.current: compress_btn.current.disabled = True
+        if stop_btn.current: stop_btn.current.disabled = False
+        if btn_text.current: btn_text.current.value = f"Compressing... (0/{len(selected_file_paths)})"
         
-        # Reset Progress UI
-        if res_text.current: res_text.current.value = "---"
-        if rem_time_text.current: rem_time_text.current.value = "---"
-        if fps_text.current: fps_text.current.value = "---"
         # Reset Progress UI
         if res_text.current: res_text.current.value = "---"
         if rem_time_text.current: rem_time_text.current.value = "---"
@@ -1332,7 +1337,7 @@ async def main(page: ft.Page):
             ref=compress_btn, 
             content=ft.Row([
                 ft.Icon(ft.Icons.BOLT_ROUNDED), 
-                ft.Text("Start Compression", size=16, weight=ft.FontWeight.W_900)
+                ft.Text("Start Compression", ref=btn_text, size=16, weight=ft.FontWeight.W_900)
             ], alignment=ft.MainAxisAlignment.CENTER, spacing=10), 
             style=ft.ButtonStyle(
                 padding=15, 
