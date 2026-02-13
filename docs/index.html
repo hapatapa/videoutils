@@ -506,17 +506,38 @@
             </div>
         </section>
 
-        <!-- About / Vibe Check -->
-        <section class="container">
+        <!-- About Section -->
+        <section id="about" class="container">
             <div class="showcase">
                 <div class="showcase-content">
                     <h2 class="display-medium"
                         style="margin-bottom: 24px; display: flex; align-items: center; gap: 16px;">
-                        Is this vibe coded?
+                        About Video Utilities
                         <img src="assets/processing.webp"
                             style="width: 64px; height: 64px; border-radius: var(--md-sys-radius-medium);"
                             alt="Loading Animation">
                     </h2>
+                    <p class="body-large" style="color: var(--md-sys-color-on-surface-variant); margin-bottom: 16px;">
+                        I made this because I needed a simple tool to compress videos for Discord without
+                        dealing with bad and slow software or websites since their performance is even worse and they
+                        often add subscriptions.
+                        <br>
+                        I then proceeded to add other cool features to show the kind of stuff
+                        you can make with ffmpeg (the trimming feature is my favorite). And now it became this!
+                    </p>
+                    <p class="body-large" style="color: var(--md-sys-color-on-surface-variant);">
+                        It's just a local app that uses FFmpeg to do the heavy lifting. It can even choose the right
+                        encoding method for your GPU automatically (NVENC, AMF, VAAPI, etc.).
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Vibe Check -->
+        <section class="container">
+            <div class="showcase">
+                <div class="showcase-content">
+                    <h2 class="display-medium" style="margin-bottom: 24px;">Is this vibe coded?</h2>
                     <p class="body-large" style="color: var(--md-sys-color-on-surface-variant); margin-bottom: 16px;">
                         Yes, I know some people don't like vibe coded programs, but I am simply not that experienced
                         with coding using Flet so I had to use AI.
@@ -585,8 +606,8 @@
                 <h2 class="display-medium" style="margin-bottom: 16px;">Download Video Utilities</h2>
                 <p class="body-large"
                     style="color: var(--md-sys-color-on-surface-variant); margin-bottom: 64px; max-width: 600px; margin-left: auto; margin-right: auto;">
-                    Latest version: <span class="chip"
-                        style="margin-top: 0; padding: 4px 12px; color: var(--md-sys-color-primary);">v35</span>
+                    Latest version: <span id="latest-version" class="chip"
+                        style="margin-top: 0; padding: 4px 12px; color: var(--md-sys-color-primary);">...</span>
                 </p>
 
                 <div class="features-grid" style="grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));">
@@ -603,12 +624,12 @@
                             Choose the .run file for easy execution, or the archive if you have trouble with extraction.
                         </p>
                         <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
-                            <a href="https://github.com/hapatapa/videoutils/releases/download/v35/VideoUtilities-Linux.run"
+                            <a href="https://github.com/hapatapa/videoutils/releases/latest/download/VideoUtilities-Linux.run"
                                 download="VideoUtilities-Linux.run" class="btn btn-filled label-large">
                                 <span class="material-symbols-rounded">bolt</span>
                                 Download .run (Recommended)
                             </a>
-                            <a href="https://github.com/hapatapa/videoutils/releases/download/v35/VideoUtilities-Linux-Native.tar.gz"
+                            <a href="https://github.com/hapatapa/videoutils/releases/latest/download/VideoUtilities-Linux-Native.tar.gz"
                                 download="VideoUtilities-Linux-Native.tar.gz" class="btn btn-outlined label-large">
                                 <span class="material-symbols-rounded">folder_zip</span>
                                 Download Zip (.tar.gz)
@@ -629,7 +650,7 @@
                             Standalone executable for Windows 10/11. No installation required.
                         </p>
                         <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
-                            <a href="https://github.com/hapatapa/videoutils/releases/download/v35/VideoUtilities-Windows.exe"
+                            <a href="https://github.com/hapatapa/videoutils/releases/latest/download/VideoUtilities-Windows.exe"
                                 download="VideoUtilities-Windows.exe" class="btn btn-filled label-large">
                                 <span class="material-symbols-rounded">download</span>
                                 Download for Windows (.exe)
@@ -682,6 +703,19 @@
                 heroImage.style.transform = `rotateX(0deg) rotateY(0deg)`;
             });
         }
+        // Fetch latest version tag from GitHub API
+        fetch('https://api.github.com/repos/hapatapa/videoutils/releases/latest')
+            .then(response => response.json())
+            .then(data => {
+                const versionSpan = document.getElementById('latest-version');
+                if (versionSpan && data.tag_name) {
+                    versionSpan.textContent = data.tag_name;
+                }
+            })
+            .catch(err => {
+                console.error('Failed to fetch latest version:', err);
+                document.getElementById('latest-version').textContent = 'Latest';
+            });
     </script>
 </body>
 
