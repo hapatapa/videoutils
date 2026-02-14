@@ -6,7 +6,6 @@ A dedicated mode for specialized audio tasks within video files.
 ### 🎯 Current Goals:
 - **Audio Replacement:** Easily swap the audio track of a video file with an external audio file (e.g., replacing background noise with background music).
 - **Volume Normalization:** Automatically normalize audio levels so that "quiet" videos are brought up to a standard volume without clipping.
-- **Dedicated Extraction:** A streamlined way to bulk-extract high-quality audio from video files into MP3, WAV, or FLAC formats.
 
 ### 🚀 Future Possibilities:
 - **Audio Boost:** Simple gain slider to boost audio on extremely quiet recordings.
