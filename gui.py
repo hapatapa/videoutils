@@ -6,8 +6,11 @@ import base64
 import subprocess
 import tempfile
 import asyncio
+import atexit
+import signal
 import flet as ft
 from flet_video import Video, VideoMedia, PlaylistMode
+import shutil
 import compressor_logic as logic
 
 # Logic to prevent console windows from popping up on Windows
@@ -20,10 +23,28 @@ CREATE_NEW_CONSOLE = 16
 
 async def main(page: ft.Page):
     # Set assets_dir to the assets folder directly
+    # Set assets_dir to the assets folder directly
     page.assets_dir = os.path.join(os.path.dirname(__file__), "assets")
     
-    log_path = os.path.join(os.path.dirname(__file__), "debug/", "trace.log")
-    with open(log_path, "w") as f: f.write("Main started\n"); f.flush()
+    # --- Temp/Cache Directory Setup ---
+    if os.name == 'nt':
+        # Use %LOCALAPPDATA%/Temp if available, otherwise standard temp
+        temp_base = os.environ.get('LOCALAPPDATA', '')
+        if temp_base:
+            temp_dir = os.path.join(temp_base, 'Temp', 'video-utilities')
+        else:
+            temp_dir = os.path.join(tempfile.gettempdir(), 'video-utilities')
+    else:
+        # Linux: ~/.cache/video-utilities
+        temp_dir = os.path.expanduser('~/.cache/video-utilities')
+        
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    log_path = os.path.join(temp_dir, "trace.log")
+    try:
+        with open(log_path, "w") as f: f.write("Main started\n"); f.flush()
+    except Exception as e:
+        print(f"Failed to write log: {e}")
     current_tab = ""
     page.title = "Video Utilities"
     page.theme_mode = ft.ThemeMode.DARK
@@ -35,13 +56,32 @@ async def main(page: ft.Page):
         color_scheme_seed=ft.Colors.INDIGO
     )
     page.padding = 15
-    page.window.width = 1150
-    page.window.height = 900
+
     page.window.min_width = 1143
     page.window.min_height = 841
     page.window.resizable = True
     page.window.icon = "Icon.png"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+
+    # --- Cleanup Logic ---
+    def cleanup_temp():
+        try:
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+        except Exception as e:
+            print(f"Cleanup error: {e}")
+
+    # Register for script exit (covers Ctrl+C and normal exit)
+    atexit.register(cleanup_temp)
+    
+    def signal_handler(sig, frame):
+        cleanup_temp()
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+
 
     # --- FFmpeg Installation Logic (Reusable) ---
     def show_ffmpeg_modal():
@@ -216,7 +256,7 @@ async def main(page: ft.Page):
         merger_progress_fill.current.width = bar_max_w * pct
         merger_progress_fill.current.update()
 
-    maxrate_input = ft.Ref[ft.TextField]()
+
     keyframe_input = ft.Ref[ft.TextField]()
     
     log_side_container = ft.Ref[ft.Container]()
@@ -253,7 +293,7 @@ async def main(page: ft.Page):
     
     selected_file_paths = []  # List of input file paths for batch processing
     target_output_path = None  # Can be a folder (for batch) or file (for single)
-    preview_file_path = os.path.join(os.getcwd(), "preview_frame.jpg")
+    preview_file_path = os.path.join(temp_dir, "preview_frame.jpg")
     stop_event = threading.Event()
     is_compressing = False
     easter_egg_clicks = 0
@@ -276,39 +316,65 @@ async def main(page: ft.Page):
         page.update()
 
     def update_preview_loop():
+        # Force cleanup of old preview file
+        if os.path.exists(preview_file_path):
+            try: os.remove(preview_file_path)
+            except: pass
+            
         # Small delay to allow ffmpeg to write first frame
-        time.sleep(1)
+        time.sleep(2)  # Increased delay to give ffmpeg more time
+        log(f"🔍 Preview loop started. Looking for: {preview_file_path}")
+        
+        last_modified = 0  # Track when file was last modified
+        first_frame_shown = False
+        
         while is_compressing:
-            if preview_switch.current.value and os.path.exists(preview_file_path):
-                try:
-                    # Clear file handle quickly
-                    with open(preview_file_path, "rb") as f:
-                        img_bytes = f.read()
-                    
-                    if len(img_bytes) > 1000: # Ensure we didn't catch a tiny/partial file
-                        encoded = base64.b64encode(img_bytes).decode("utf-8")
-                        preview_image.current.src_base64 = encoded
+            if preview_switch.current.value:
+                if os.path.exists(preview_file_path):
+                    try:
+                        # Check if file has been modified since last check
+                        current_modified = os.path.getmtime(preview_file_path)
                         
-                        # Detect image dimensions and update container width
-                        try:
-                            from PIL import Image
-                            import io
-                            img = Image.open(io.BytesIO(img_bytes))
-                            img_width = img.width
-                            # Add padding for container (30 total for padding)
-                            preview_container.current.width = img_width + 30
-                        except:
-                            pass
-                        
-                        # Smooth transition from placeholder to frames
-                        if preview_image.current.opacity == 0:
-                            preview_image.current.opacity = 1
-                            placeholder_img_control.current.opacity = 0
-                            placeholder_img_control.current.update()
-                        
-                        preview_image.current.update()
-                        preview_container.current.update()
-                except Exception as e:
+                        if current_modified > last_modified:
+                            last_modified = current_modified
+                            
+                            # Clear file handle quickly
+                            with open(preview_file_path, "rb") as f:
+                                img_bytes = f.read()
+                            
+                            if len(img_bytes) > 1000: # Ensure we didn't catch a tiny/partial file
+                                encoded = base64.b64encode(img_bytes).decode("utf-8")
+                                # Use data URI format with src instead of src_base64
+                                preview_image.current.src = f"data:image/jpeg;base64,{encoded}"
+                                
+                                # Detect image dimensions and update container width
+                                try:
+                                    from PIL import Image
+                                    import io
+                                    img = Image.open(io.BytesIO(img_bytes))
+                                    img_width = img.width
+                                    # Add padding for container (30 total for padding)
+                                    preview_container.current.width = img_width + 30
+                                except:
+                                    pass
+                                
+                                # Smooth transition from placeholder to frames (only on first NEW frame)
+                                if not first_frame_shown:
+                                    first_frame_shown = True
+                                    preview_image.current.opacity = 1
+                                    placeholder_img_control.current.opacity = 0
+                                    placeholder_img_control.current.update()
+                                    log("✅ Preview image displayed!")
+                                
+                                preview_image.current.update()
+                                preview_container.current.update()
+                                page.update()  # Force UI refresh
+                            else:
+                                log(f"⚠️ Preview file too small: {len(img_bytes)} bytes")
+                    except Exception as e:
+                        log(f"⚠️ Preview read error: {e}")
+                else:
+                    # Only log this once per second to avoid spam
                     pass
             time.sleep(1)
 
@@ -447,7 +513,7 @@ async def main(page: ft.Page):
 
     def generate_waveform(input_path):
         try:
-            outfile = os.path.join(os.getcwd(), "waveform_temp.png")
+            outfile = os.path.join(temp_dir, "waveform_temp.png")
             # Use cyan color matching the theme
             # split_channels=1 looks cool but maybe messy for mono. 
             # simple: colors=cyan
@@ -463,7 +529,7 @@ async def main(page: ft.Page):
 
     def generate_thumbnail(input_path):
         try:
-            outfile = os.path.join(os.getcwd(), "thumbnail_temp.jpg")
+            outfile = os.path.join(temp_dir, "thumbnail_temp.jpg")
             cmd = [
                 "ffmpeg", "-y", "-i", input_path,
                 "-ss", "00:00:01",
@@ -752,13 +818,6 @@ async def main(page: ft.Page):
                 ft.Row([
                     ft.Container(
                         content=ft.TextField(
-                            ref=maxrate_input, label="Max Rate (k)", value="120", expand=True, border_radius=10
-                        ),
-                        expand=True,
-                        tooltip="The absolute maximum bitrate ceiling allowed during spikes in complexity."
-                    ),
-                    ft.Container(
-                        content=ft.TextField(
                             ref=keyframe_input, label="GOP (Keyframes)", value="300", expand=True, border_radius=10
                         ),
                         expand=True,
@@ -858,7 +917,7 @@ async def main(page: ft.Page):
             "denoise": denoise_switch.current.value,
             "aq": aq_switch.current.value,
             "cpu_used": int(cpu_used_slider.current.value),
-            "maxrate": maxrate_input.current.value,
+
             "keyframe": keyframe_input.current.value
         }
 
@@ -876,6 +935,13 @@ async def main(page: ft.Page):
         # Files processed label visibility removed per request
         if files_processed_text.current:
             files_processed_text.current.visible = False
+        
+        # Reset preview to show placeholder until first frame is ready
+        if show_preview and preview_image.current and placeholder_img_control.current:
+            preview_image.current.opacity = 0
+            placeholder_img_control.current.opacity = 1
+            preview_image.current.update()
+            placeholder_img_control.current.update()
         
         page.update()
         
@@ -1326,15 +1392,17 @@ async def main(page: ft.Page):
                     ft.Container(
                         content=ft.Image(
                             ref=preview_image,
+                            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",  # 1x1 transparent pixel
                             fit=ft.BoxFit.CONTAIN, 
-                            border_radius=10,
                             opacity=0,
                             animate_opacity=400,
-                            src="https://via.placeholder.com/480x270/111111/FFFFFF?text=+",
+                            gapless_playback=True,
                             expand=True
                         ),
                         alignment=ft.Alignment.CENTER,
-                        expand=True
+                        expand=True,
+                        border_radius=12,
+                        clip_behavior=ft.ClipBehavior.HARD_EDGE
                     ),
                     # 3. Dynamic Status Overlay
                     ft.Container(

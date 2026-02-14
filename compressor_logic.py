@@ -298,11 +298,6 @@ def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, lo
     
     # Apply Advanced Parameters (Skips H.261 to avoid bitrate conflicts)
     if advanced_params and v_enc != "h261":
-        # Maxrate/Bufsize logic
-        if advanced_params.get("maxrate") and v_enc != "libsvtav1":
-            mr = advanced_params.get("maxrate")
-            bu = int(int(mr) * 2) 
-            enc_args.extend(['-maxrate', f"{mr}k", '-bufsize', f"{bu}k"])
             
         if advanced_params.get("keyframe"):
             enc_args.extend(['-g', advanced_params.get("keyframe")])
@@ -347,13 +342,16 @@ def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, lo
     prev_process = None
     if preview_path:
         # Start a lightweight independent preview generator
+        # Using -update 1 to continuously update a single file
         prev_cmd = [
-            'ffmpeg', '-y', '-hide_banner', '-i', input_file,
-            '-vf', 'fps=1,scale=480:-1', '-update', '1', '-f', 'image2', preview_path
+            'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-i', input_file,
+            '-vf', 'fps=1,scale=480:-1', '-update', '1', '-q:v', '2', preview_path
         ]
         try:
-            prev_process = subprocess.Popen(prev_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=SUBPROCESS_FLAGS)
-        except: pass
+            prev_process = subprocess.Popen(prev_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=SUBPROCESS_FLAGS)
+            log_func(f"📸 Preview generator started for: {os.path.basename(preview_path)}")
+        except Exception as e:
+            log_func(f"⚠️ Failed to start preview generator: {e}")
 
     # Two-Pass Logic: Force single pass for legacy encoders
     passes = [1, 2] if advanced_params and advanced_params.get("two_pass") and not is_legacy else [0]
