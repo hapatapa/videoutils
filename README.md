@@ -3,10 +3,13 @@
 ## A Video Processing app made using Flet and FFmpeg
 
 # Features
-  - Compress Videos
-  - Convert Videos to other formats and even to audio
-  - Trim Parts of Videos without re-encoding
-  - Merge Multiple Videos into one file
+- Compress Videos
+- Convert Videos to other formats and even to audio
+- Trim Parts of Videos without re-encoding
+- Merge Multiple Videos into one file
+
+# Future Plans & Ideas
+  Check out the [Future Plans & Ideas](plans.md) for what could come next!
 
 # Usage
   - Simply run the executable, if FFmpeg is not found, the app will help you with installation.
