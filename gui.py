@@ -1305,7 +1305,7 @@ async def main(page: ft.Page):
         content=ft.Column([
             ft.Row([
                 ft.Icon(ft.Icons.PLAY_CIRCLE_OUTLINE_ROUNDED, size=20, color=ft.Colors.PRIMARY),
-                ft.Text("Live Preview:", size=16, weight=ft.FontWeight.W_900),
+                ft.Text("Preview:", size=16, weight=ft.FontWeight.W_900),
             ], spacing=10, alignment=ft.MainAxisAlignment.CENTER),
             ft.Container(
                 content=ft.Stack([
@@ -2614,7 +2614,7 @@ async def main(page: ft.Page):
         clip_behavior=ft.ClipBehavior.HARD_EDGE,
         content=ft.Column([
             ft.Row([
-                ft.Icon(ft.Icons.PLAY_CIRCLE_FILLED_ROUNDED, size=20, color=ft.Colors.PRIMARY),
+                ft.Icon(ft.Icons.PLAY_CIRCLE_OUTLINE_ROUNDED, size=20, color=ft.Colors.PRIMARY),
                 ft.Text("Preview", size=18, weight=ft.FontWeight.W_900),
 
             ], spacing=10),
@@ -3117,7 +3117,7 @@ async def main(page: ft.Page):
         width=400, 
         clip_behavior=ft.ClipBehavior.HARD_EDGE,
         content=ft.Column([
-            ft.Row([ft.Icon(ft.Icons.PLAY_CIRCLE_FILLED_ROUNDED, size=20, color=ft.Colors.PRIMARY), ft.Text("Preview", size=18, weight=ft.FontWeight.W_900)], spacing=10),
+            ft.Row([ft.Icon(ft.Icons.PLAY_CIRCLE_OUTLINE_ROUNDED, size=20, color=ft.Colors.PRIMARY), ft.Text("Preview", size=18, weight=ft.FontWeight.W_900)], spacing=10),
             ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
             ft.Container(
                 ref=merger_player_container, 
