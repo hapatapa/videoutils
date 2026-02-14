@@ -9,7 +9,7 @@
 - Merge Multiple Videos into one file
 
 # Future Plans & Ideas
-  Check out the [Future Plans & Ideas](plans.md) for what could come next!
+  - Check out the [Future Plans & Ideas](plans.md) for what could come next!
 
 # Usage
   - Simply run the executable, if FFmpeg is not found, the app will help you with installation.
