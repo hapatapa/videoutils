@@ -1,2 +1,0 @@
-
-(flet:32459): Gdk-CRITICAL **: 17:55:39.792: gdk_window_get_state: assertion 'GDK_IS_WINDOW (window)' failed
