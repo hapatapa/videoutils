@@ -299,6 +299,9 @@ async def main(page: ft.Page):
     easter_egg_clicks = 0
     obscure_revealed = False
     all_codecs_revealed = False
+    
+    last_set_by_slider = 0.0
+    is_updating_ui = False
 
     def log(message, replace_last=False):
         # We'll use this for status updates or fallback logging
@@ -666,17 +669,31 @@ async def main(page: ft.Page):
             compress_btn.current.disabled = not bool(selected_file_paths)
             compress_btn.current.update()
 
-    def on_slider_change(e):
-        target_size_input.current.value = f"{e.control.value:.1f}"
-        target_size_input.current.update()
+    
+    
+    def on_slider_change_end(e):
+        nonlocal last_set_by_slider
+        try:
+            val = float(e.control.value)
+            last_set_by_slider = val
+            target_size_input.current.value = f"{val:.1f}"
+            target_size_input.current.update()
+        except: pass
 
     def on_text_change(e):
+        nonlocal last_set_by_slider
         try:
             if not e.control.value: return
             val = float(e.control.value)
+            
+            # If this value matches what the slider just set, ignore it to prevent loop
+            if abs(val - last_set_by_slider) < 0.1:
+                return
+
             if 1 <= val <= 1000:
-                target_size_slider.current.value = min(val, 100)
-                target_size_slider.current.update()
+                if target_size_slider.current:
+                     target_size_slider.current.value = min(val, 100)
+                     target_size_slider.current.update()
         except: pass
 
     def on_size_input_change(e):
@@ -1234,7 +1251,8 @@ async def main(page: ft.Page):
                 max=100, 
                 divisions=99, 
                 value=9, 
-                on_change=on_slider_change,
+                label="{value}",
+                on_change_end=on_slider_change_end,
                 active_color=ft.Colors.PRIMARY,
                 inactive_color=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             ),
