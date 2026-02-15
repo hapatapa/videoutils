@@ -83,24 +83,71 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Get Release Name
-        id: release_name
+      - name: Get Release Info
+        id: release_info
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           MSG="${{ github.event.head_commit.message }}"
-          if [ -z "$MSG" ]; then
-            MSG="Manual Build ${{ github.run_number }}"
-          else
-            # Extract first line of commit message
-            MSG=$(echo "$MSG" | head -n 1)
+          TITLE=""
+          TAG=""
+
+          # Get first line of message
+          TITLE=$(echo "$MSG" | head -n 1)
+          if [ -z "$TITLE" ]; then
+            TITLE="Manual Build ${{ github.run_number }}"
           fi
-          echo "title=$MSG" >> $GITHUB_OUTPUT
+
+          # 1. Try to extract version from commit message
+          EXTRACTED_VERSION=$(echo "$TITLE" | grep -oP '\(v?\d+\.\d+\.\d+\)$' | tr -d '()' | head -n 1)
+          
+          if [ -n "$EXTRACTED_VERSION" ]; then
+            [[ "$EXTRACTED_VERSION" != v* ]] && EXTRACTED_VERSION="v$EXTRACTED_VERSION"
+            TAG="$EXTRACTED_VERSION"
+            echo "Extracted version from message: $TAG"
+          else
+            # 2. No version in message - Get latest release and increment
+            LATEST_TAG=$(gh release list --limit 1 | awk '{print $1}')
+            echo "Latest release tag found: $LATEST_TAG"
+            
+            if [ -z "$LATEST_TAG" ]; then
+              TAG="v1.0.0"
+            else
+              # Parse v1.2.3 or 1.2.3
+              CLEAN_TAG=${LATEST_TAG#v}
+              IFS='.' read -r major minor patch <<< "$CLEAN_TAG"
+              # Ensure they are numbers, fallback if parsing fails
+              if [[ "$major" =~ ^[0-9]+$ ]] && [[ "$minor" =~ ^[0-9]+$ ]] && [[ "$patch" =~ ^[0-9]+$ ]]; then
+                patch=$((patch + 1))
+                TAG="v$major.$minor.$patch"
+              else
+                TAG="v1.0.0"
+              fi
+            fi
+            echo "Auto-incremented version: $TAG"
+          fi
+
+          # 3. Check if tag exists and delete if it does
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists. Deleting to replace..."
+            gh release delete "$TAG" -y --cleanup-tag
+            # Give GitHub a moment to process the deletion
+            sleep 2
+          elif git ls-remote --tags origin | grep -q "refs/tags/$TAG"; then
+            echo "Tag $TAG exists but no release. Deleting tag..."
+            gh api -X DELETE "/repos/${{ github.repository }}/git/refs/tags/$TAG"
+            sleep 1
+          fi
+
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', github.run_number) }}
-          name: ${{ steps.release_name.outputs.title }}
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          name: ${{ steps.release_info.outputs.title }}
           draft: false
           prerelease: ${{ github.ref_name != 'main' && github.ref_type != 'tag' }}
           files: |

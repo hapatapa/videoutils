@@ -1498,10 +1498,12 @@ async def main(page: ft.Page):
     tab_converter_text = ft.Ref[ft.Text]()
     tab_trimmer_text = ft.Ref[ft.Text]()
     tab_merger_text = ft.Ref[ft.Text]()
+    tab_more_text = ft.Ref[ft.Text]()
     tab_compressor_icon = ft.Ref[ft.Icon]()
     tab_converter_icon = ft.Ref[ft.Icon]()
     tab_trimmer_icon = ft.Ref[ft.Icon]()
     tab_merger_icon = ft.Ref[ft.Icon]()
+    tab_more_icon = ft.Ref[ft.Icon]()
     view_switcher = ft.Ref[ft.AnimatedSwitcher]()
     
     # --- Animated Views ---
@@ -3281,7 +3283,26 @@ async def main(page: ft.Page):
     expand=True,
     offset=ft.Offset(3, 0),
     animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
-)
+    )
+
+    # --- More View ---
+    more_view_col = ft.Column([
+        ft.Container(
+            content=ft.Column([
+                ft.Icon(ft.Icons.AUTO_AWESOME_MOTION_ROUNDED, size=80, color=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+                ft.Text("More Features Coming Soon", size=24, weight=ft.FontWeight.W_900, color=ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE)),
+                ft.Text("New Features will appear here!", size=16, color=ft.Colors.with_opacity(0.3, ft.Colors.ON_SURFACE)),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, spacing=10),
+            expand=True,
+            alignment=ft.Alignment.CENTER
+        )
+    ], 
+    alignment=ft.MainAxisAlignment.CENTER,
+    visible=True, 
+    expand=True,
+    offset=ft.Offset(4, 0),
+    animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
+    )
 
     TAB_WIDTH = 135
     TAB_HEIGHT = 36
@@ -3319,6 +3340,14 @@ async def main(page: ft.Page):
             tab_merger_text.current.update()
             tab_merger_icon.current.update()
 
+        if tab_more_text.current:
+            is_active = (current_tab == "more")
+            c = ft.Colors.ON_PRIMARY_CONTAINER if is_active else ft.Colors.ON_SURFACE_VARIANT
+            tab_more_text.current.color = c
+            tab_more_icon.current.color = c
+            tab_more_text.current.update()
+            tab_more_icon.current.update()
+
     def set_tab(name):
         nonlocal current_tab
         if current_tab == name: return
@@ -3332,8 +3361,10 @@ async def main(page: ft.Page):
                 tab_indicator.current.left = TAB_WIDTH
             elif name == "trimmer":
                 tab_indicator.current.left = TAB_WIDTH * 2
-            else:
+            elif name == "merger":
                 tab_indicator.current.left = TAB_WIDTH * 3
+            else:
+                tab_indicator.current.left = TAB_WIDTH * 4
             tab_indicator.current.update()
             
         # Switch View with Animation
@@ -3342,26 +3373,37 @@ async def main(page: ft.Page):
             converter_view_col.offset = ft.Offset(1, 0)
             trimmer_view_col.offset = ft.Offset(2, 0)
             merger_view_col.offset = ft.Offset(3, 0)
+            more_view_col.offset = ft.Offset(4, 0)
         elif name == "converter":
             compressor_view_col.offset = ft.Offset(-1, 0)
             converter_view_col.offset = ft.Offset(0, 0)
             trimmer_view_col.offset = ft.Offset(1, 0)
             merger_view_col.offset = ft.Offset(2, 0)
+            more_view_col.offset = ft.Offset(3, 0)
         elif name == "trimmer":
             compressor_view_col.offset = ft.Offset(-2, 0)
             converter_view_col.offset = ft.Offset(-1, 0)
             trimmer_view_col.offset = ft.Offset(0, 0)
             merger_view_col.offset = ft.Offset(1, 0)
-        else:
+            more_view_col.offset = ft.Offset(2, 0)
+        elif name == "merger":
             compressor_view_col.offset = ft.Offset(-3, 0)
             converter_view_col.offset = ft.Offset(-2, 0)
             trimmer_view_col.offset = ft.Offset(-1, 0)
             merger_view_col.offset = ft.Offset(0, 0)
+            more_view_col.offset = ft.Offset(1, 0)
+        else: # more
+            compressor_view_col.offset = ft.Offset(-4, 0)
+            converter_view_col.offset = ft.Offset(-3, 0)
+            trimmer_view_col.offset = ft.Offset(-2, 0)
+            merger_view_col.offset = ft.Offset(-1, 0)
+            more_view_col.offset = ft.Offset(0, 0)
             
         compressor_view_col.update()
         converter_view_col.update()
         trimmer_view_col.update()
         merger_view_col.update()
+        more_view_col.update()
         
         update_tabs()
 
@@ -3369,7 +3411,7 @@ async def main(page: ft.Page):
         bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.SURFACE_CONTAINER_HIGHEST),
         border_radius=TAB_HEIGHT/2,
         padding=0,
-        width=TAB_WIDTH * 4,
+        width=TAB_WIDTH * 5,
         height=TAB_HEIGHT,
         content=ft.Stack([
             # Animated Pill
@@ -3427,6 +3469,17 @@ async def main(page: ft.Page):
                     alignment=ft.Alignment.CENTER,
                     on_click=lambda _: set_tab("merger"),
                     border_radius=TAB_HEIGHT/2,
+                ),
+                ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.MENU, ref=tab_more_icon, size=16, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Text("More...", ref=tab_more_text, weight=ft.FontWeight.W_600, size=13, color=ft.Colors.ON_SURFACE_VARIANT)
+                    ], spacing=6, alignment=ft.MainAxisAlignment.CENTER),
+                    width=TAB_WIDTH,
+                    height=TAB_HEIGHT,
+                    alignment=ft.Alignment.CENTER,
+                    on_click=lambda _: set_tab("more"),
+                    border_radius=TAB_HEIGHT/2,
                 )
             ], spacing=0)
         ]),
@@ -3449,7 +3502,8 @@ async def main(page: ft.Page):
                         compressor_view_col,
                         converter_view_col,
                         trimmer_view_col,
-                        merger_view_col
+                        merger_view_col,
+                        more_view_col
                     ]),
                     expand=True,
                     clip_behavior=ft.ClipBehavior.HARD_EDGE
