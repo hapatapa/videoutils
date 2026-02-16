@@ -76,6 +76,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libwebkit2gtk-4.1-dev libappindicator3-dev libsecret-1-dev mpv libmpv-dev makeself gobject-introspection libgirepository1.0-dev libcairo2-dev python3-dev
           python -m pip install --upgrade pip
+          # Ensure system pkg-config is found even if PKG_CONFIG_PATH is overridden by Python setup
+          export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:$PKG_CONFIG_PATH"
           pip install -r requirements.txt
           pip install flet==0.80.2 pyinstaller
       - name: Build Linux (Native Professional)
@@ -118,7 +120,7 @@ jobs:
           pip install flet==0.80.2 pyinstaller
       - name: Build Windows (Single Executable)
         run: |
-          flet pack main.py --name "VideoUtilities-Windows" --yes --verbose
+          flet pack main.py --name "VideoUtilities-Windows" --icon "assets/icon.ico" --add-data "assets;assets" --collect-all flet_video --collect-all playsound --yes --verbose
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:

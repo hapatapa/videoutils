@@ -127,15 +127,14 @@ async def main(page: ft.Page):
                 except: pass
 
     # Window Initialization
-    page.window.title_bar_hidden = True
-    page.window.title_bar_buttons_hidden = True
-    page.window.frameless = True
+    page.window_title_bar_hidden = True
+    page.window_title_bar_buttons_hidden = True
     page.padding = 0
     
-    page.window.min_width = 1143
-    page.window.min_height = 841
-    page.window.resizable = True
-    page.window.icon = "Icon.png"
+    page.window_min_width = 1143
+    page.window_min_height = 841
+    page.window_resizable = True
+    page.window_icon = "Icon.png"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
     # --- Cleanup Logic ---
@@ -3727,62 +3726,62 @@ async def main(page: ft.Page):
     )
 
     # Window Actions
-    # Window Actions (Sync for snappier response)
+    # Window Actions (Optimized for Linux)
     def window_minimize(e):
-        page.window.minimized = True
-        page.update()
+        page.window_minimize()
 
     def window_toggle_maximize(e):
-        page.window.maximized = not page.window.maximized
+        if page.window_maximized:
+            page.window_maximized = False
+        else:
+            page.window_maximized = True
         page.update()
 
     def window_close(e):
-        page.window.close()
+        page.window_destroy()
 
-    title_bar = ft.Container(
-        bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
-        height=35,
-        content=ft.Row([
-            # Draggable portion (Icon + Title + Empty Space)
-            ft.WindowDragArea(
-                content=ft.Container(
-                    content=ft.Row([
-                        ft.Row([
-                            ft.Image(src="Icon.png", width=18, height=18),
-                            ft.Text("Video Utilities", size=11, weight=ft.FontWeight.W_600, color=ft.Colors.ON_SURFACE_VARIANT),
-                        ], spacing=10),
-                        ft.Container(expand=True), # Spacer for dragging the whole bar
-                    ]),
-                    padding=ft.padding.only(left=15),
-                    expand=True
-                ),
+    title_bar = ft.Stack([
+        # Draggable Background (Full width/height)
+        ft.WindowDragArea(
+            content=ft.Container(
+                bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+                height=35,
                 expand=True
             ),
-            
-            # Non-draggable portion (System Buttons)
-            ft.Row([
-                ft.IconButton(
-                    ft.Icons.REMOVE_ROUNDED, 
-                    icon_size=16, 
-                    on_click=window_minimize,
-                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=0), padding=5)
-                ),
-                ft.IconButton(
-                    ft.Icons.CROP_SQUARE_ROUNDED, 
-                    icon_size=14, 
-                    on_click=window_toggle_maximize,
-                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=0), padding=5)
-                ),
-                ft.IconButton(
-                    ft.Icons.CLOSE_ROUNDED, 
-                    icon_size=16, 
-                    on_click=window_close,
-                    hover_color=ft.Colors.RED_400,
-                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=0), padding=5)
-                ),
-            ], spacing=0)
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, spacing=0),
-    )
+        ),
+        # Button/UI Overlay
+        ft.Container(
+            height=35,
+            padding=ft.padding.only(left=15, right=5),
+            content=ft.Row([
+                ft.Row([
+                    ft.Image(src="Icon.png", width=18, height=18),
+                    ft.Text("Video Utilities", size=11, weight=ft.FontWeight.W_600, color=ft.Colors.ON_SURFACE_VARIANT),
+                ], spacing=10),
+                ft.Row([
+                    ft.IconButton(
+                        ft.Icons.REMOVE_ROUNDED, 
+                        icon_size=16, 
+                        on_click=window_minimize,
+                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=0), padding=5)
+                    ),
+                    ft.IconButton(
+                        ft.Icons.CROP_SQUARE_ROUNDED, 
+                        icon_size=14, 
+                        on_click=window_toggle_maximize,
+                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=0), padding=5)
+                    ),
+                    ft.IconButton(
+                        ft.Icons.CLOSE_ROUNDED, 
+                        icon_size=16, 
+                        on_click=window_close,
+                        hover_color=ft.Colors.RED_400,
+                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=0), padding=5)
+                    ),
+                ], spacing=0)
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+        )
+    ], height=35)
 
     page.add(
         ft.Column([
