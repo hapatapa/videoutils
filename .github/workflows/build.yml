@@ -11,10 +11,62 @@ permissions:
   contents: write
 
 jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.calc.outputs.tag }}
+      title: ${{ steps.calc.outputs.title }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Needed for tags
+      - name: Calculate Version
+        id: calc
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MSG="${{ github.event.head_commit.message }}"
+          TITLE=$(echo "$MSG" | head -n 1)
+          if [ -z "$TITLE" ]; then TITLE="Manual Build ${{ github.run_number }}"; fi
+          
+          # Extract version from message
+          EXTRACTED_VERSION=$(echo "$TITLE" | grep -oP '\(v?\d+\.\d+\.\d+\)$' | tr -d '()' | head -n 1)
+          
+          if [ -n "$EXTRACTED_VERSION" ]; then
+            [[ "$EXTRACTED_VERSION" != v* ]] && EXTRACTED_VERSION="v$EXTRACTED_VERSION"
+            TAG="$EXTRACTED_VERSION"
+          else
+            # Increment from latest release
+            LATEST_TAG=$(gh release list --limit 1 | awk '{print $1}')
+            if [ -z "$LATEST_TAG" ]; then
+              TAG="v1.0.0"
+            else
+              CLEAN_TAG=${LATEST_TAG#v}
+              IFS='.' read -r major minor patch <<< "$CLEAN_TAG"
+              if [[ "$major" =~ ^[0-9]+$ ]] && [[ "$minor" =~ ^[0-9]+$ ]] && [[ "$patch" =~ ^[0-9]+$ ]]; then
+                patch=$((patch + 1))
+                TAG="v$major.$minor.$patch"
+              else
+                TAG="v1.0.0"
+              fi
+            fi
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+          echo "Selected Tag: $TAG"
+
   build-linux:
+    needs: get-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Update Version in Code
+        run: |
+          # Remove 'v' prefix for the internal constant
+          VERSION_NUM="${{ needs.get-version.outputs.tag }}"
+          VERSION_NUM=${VERSION_NUM#v}
+          sed -i "s/APP_VERSION = \".*\"/APP_VERSION = \"$VERSION_NUM\"/" gui.py
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -31,11 +83,7 @@ jobs:
           yes | flet build linux --product "Video Utilities" --verbose
       - name: Package Linux (Self-Extracting Run)
         run: |
-          # Identify the executable name (usually lowercase product name with underscores or based on script)
-          # We search for the executable file in build/linux/ excluding common non-app binaries
           EXE_NAME=$(find build/linux -maxdepth 1 -executable -type f -not -name "*.so*" -not -name "flet" | head -n 1 | xargs basename)
-          echo "Found executable: $EXE_NAME"
-          # Package the entire build/linux directory into a single .run file
           makeself build/linux VideoUtilities-Linux.run "Video Utilities" ./"$EXE_NAME"
       - name: Archive Linux Native
         run: |
@@ -49,9 +97,16 @@ jobs:
             VideoUtilities-Linux.run
 
   build-windows:
+    needs: get-version
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
+      - name: Update Version in Code
+        shell: bash
+        run: |
+          VERSION_NUM="${{ needs.get-version.outputs.tag }}"
+          VERSION_NUM=${VERSION_NUM#v}
+          sed -i "s/APP_VERSION = \".*\"/APP_VERSION = \"$VERSION_NUM\"/" gui.py
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -71,7 +126,7 @@ jobs:
           path: dist/VideoUtilities-Windows.exe
 
   create-release:
-    needs: [build-linux, build-windows]
+    needs: [get-version, build-linux, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
     steps:
@@ -83,71 +138,25 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Get Release Info
-        id: release_info
+      - name: Prepare Release Tag
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          MSG="${{ github.event.head_commit.message }}"
-          TITLE=""
-          TAG=""
-
-          # Get first line of message
-          TITLE=$(echo "$MSG" | head -n 1)
-          if [ -z "$TITLE" ]; then
-            TITLE="Manual Build ${{ github.run_number }}"
-          fi
-
-          # 1. Try to extract version from commit message
-          EXTRACTED_VERSION=$(echo "$TITLE" | grep -oP '\(v?\d+\.\d+\.\d+\)$' | tr -d '()' | head -n 1)
-          
-          if [ -n "$EXTRACTED_VERSION" ]; then
-            [[ "$EXTRACTED_VERSION" != v* ]] && EXTRACTED_VERSION="v$EXTRACTED_VERSION"
-            TAG="$EXTRACTED_VERSION"
-            echo "Extracted version from message: $TAG"
-          else
-            # 2. No version in message - Get latest release and increment
-            LATEST_TAG=$(gh release list --limit 1 | awk '{print $1}')
-            echo "Latest release tag found: $LATEST_TAG"
-            
-            if [ -z "$LATEST_TAG" ]; then
-              TAG="v1.0.0"
-            else
-              # Parse v1.2.3 or 1.2.3
-              CLEAN_TAG=${LATEST_TAG#v}
-              IFS='.' read -r major minor patch <<< "$CLEAN_TAG"
-              # Ensure they are numbers, fallback if parsing fails
-              if [[ "$major" =~ ^[0-9]+$ ]] && [[ "$minor" =~ ^[0-9]+$ ]] && [[ "$patch" =~ ^[0-9]+$ ]]; then
-                patch=$((patch + 1))
-                TAG="v$major.$minor.$patch"
-              else
-                TAG="v1.0.0"
-              fi
-            fi
-            echo "Auto-incremented version: $TAG"
-          fi
-
-          # 3. Check if tag exists and delete if it does
+          TAG="${{ needs.get-version.outputs.tag }}"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists. Deleting to replace..."
             gh release delete "$TAG" -y --cleanup-tag
-            # Give GitHub a moment to process the deletion
             sleep 2
           elif git ls-remote --tags origin | grep -q "refs/tags/$TAG"; then
-            echo "Tag $TAG exists but no release. Deleting tag..."
             gh api -X DELETE "/repos/${{ github.repository }}/git/refs/tags/$TAG"
             sleep 1
           fi
 
-          echo "title=$TITLE" >> $GITHUB_OUTPUT
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release_info.outputs.tag }}
-          name: ${{ steps.release_info.outputs.title }}
+          tag_name: ${{ needs.get-version.outputs.tag }}
+          name: ${{ needs.get-version.outputs.title }}
           draft: false
           prerelease: ${{ github.ref_name != 'main' && github.ref_type != 'tag' }}
           files: |

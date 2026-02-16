@@ -13,6 +13,8 @@ from flet_video import Video, VideoMedia, PlaylistMode
 import shutil
 import compressor_logic as logic
 
+APP_VERSION = "Dev Build"
+
 # Logic to prevent console windows from popping up on Windows
 SUBPROCESS_FLAGS = 0
 if os.name == 'nt':
@@ -53,7 +55,7 @@ async def main(page: ft.Page):
     }
     page.theme = ft.Theme(
         font_family="Roboto Flex",
-        color_scheme_seed=ft.Colors.INDIGO
+        color_scheme_seed=ft.Colors.INDIGO_ACCENT
     )
     page.padding = 15
 
@@ -95,7 +97,7 @@ async def main(page: ft.Page):
                 return control
 
         installing = False
-        status_msg = ft.Text("This app requires FFmpeg to function.", color=ft.Colors.WHITE70)
+        status_msg = ft.Text("This app requires FFmpeg to function.", color=ft.Colors.ON_SURFACE_VARIANT)
         progress_ring = ft.ProgressRing(visible=False, width=16, height=16, stroke_width=2)
         
         async def do_install(e):
@@ -1334,7 +1336,7 @@ async def main(page: ft.Page):
     )
 
     log_side = ft.Container(
-        bgcolor=ft.Colors.BLACK_26,
+        bgcolor=ft.Colors.SURFACE_CONTAINER,
         border_radius=15,
         border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
         padding=15,
@@ -1348,23 +1350,23 @@ async def main(page: ft.Page):
                 color=ft.Colors.ON_SURFACE_VARIANT,
                 visible=False
             ),
-            ft.Text("Progress", size=48, weight=ft.FontWeight.W_900, color=ft.Colors.WHITE),
+            ft.Text("Progress", size=48, weight=ft.FontWeight.W_900, color=ft.Colors.ON_SURFACE),
             ft.Row([
                 ft.Text("Resolution : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
-                ft.Text("---", ref=res_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ft.Text("---", ref=res_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
                 ft.VerticalDivider(width=20, color=ft.Colors.TRANSPARENT),
                 ft.Text("Time remaining : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
-                ft.Text("---", ref=rem_time_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ft.Text("---", ref=rem_time_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
                 ft.VerticalDivider(width=20, color=ft.Colors.TRANSPARENT),
                 ft.Text("Frame rate : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
-                ft.Text("---", ref=fps_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ft.Text("---", ref=fps_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
                 ft.VerticalDivider(width=20, color=ft.Colors.TRANSPARENT),
                 ft.Text("Percentage : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
-                ft.Text("0%", ref=pct_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ft.Text("0%", ref=pct_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
             ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             ft.Container(
                 ref=progress_container,
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE),
                 height=6,
                 border_radius=3,
                 alignment=ft.Alignment.CENTER_LEFT,
@@ -1381,11 +1383,11 @@ async def main(page: ft.Page):
     )
 
     preview_side = ft.Container(
-        bgcolor=ft.Colors.BLACK_26,
+        bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
         border_radius=20,
         border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
         padding=15,
-        clip_behavior=ft.ClipBehavior.HARD_EDGE,
+        clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
         content=ft.Column([
             ft.Row([
                 ft.Icon(ft.Icons.PLAY_CIRCLE_OUTLINE_ROUNDED, size=20, color=ft.Colors.PRIMARY),
@@ -1419,13 +1421,11 @@ async def main(page: ft.Page):
                         ),
                         alignment=ft.Alignment.CENTER,
                         expand=True,
-                        border_radius=12,
-                        clip_behavior=ft.ClipBehavior.HARD_EDGE
                     ),
                     # 3. Dynamic Status Overlay
                     ft.Container(
                         ref=status_overlay,
-                        bgcolor=ft.Colors.with_opacity(0.2, ft.Colors.BLACK),
+                        bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.SURFACE_CONTAINER_HIGHEST),
                         blur=50,
                         border_radius=10,
                         opacity=0,
@@ -1433,13 +1433,14 @@ async def main(page: ft.Page):
                         animate_opacity=400,
                         alignment=ft.Alignment.CENTER,
                         expand=True,
-                        content=ft.Text(ref=status_text, value="", size=28, weight=ft.FontWeight.W_900, color=ft.Colors.WHITE)
+                        content=ft.Text(ref=status_text, value="", size=28, weight=ft.FontWeight.W_900, color=ft.Colors.ON_SURFACE)
                     )
                 ], expand=True),
                 alignment=ft.Alignment.CENTER,
                 expand=True,
-                bgcolor=ft.Colors.BLACK_12,
-                border_radius=12
+                bgcolor=ft.Colors.TRANSPARENT,
+                border_radius=12,
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS
             )
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, expand=True)
     )
@@ -1499,11 +1500,13 @@ async def main(page: ft.Page):
     tab_trimmer_text = ft.Ref[ft.Text]()
     tab_merger_text = ft.Ref[ft.Text]()
     tab_more_text = ft.Ref[ft.Text]()
+    tab_more_text = ft.Ref[ft.Text]()
     tab_compressor_icon = ft.Ref[ft.Icon]()
     tab_converter_icon = ft.Ref[ft.Icon]()
     tab_trimmer_icon = ft.Ref[ft.Icon]()
     tab_merger_icon = ft.Ref[ft.Icon]()
     tab_more_icon = ft.Ref[ft.Icon]()
+    setting_theme_switch = ft.Ref[ft.Switch]()
     view_switcher = ft.Ref[ft.AnimatedSwitcher]()
     
     # --- Animated Views ---
@@ -1863,26 +1866,26 @@ async def main(page: ft.Page):
 
     # Converter Log & Preview
     conv_log_side = ft.Container(
-        bgcolor=ft.Colors.BLACK_26,
+        bgcolor=ft.Colors.SURFACE_CONTAINER,
         border_radius=15,
         border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
         padding=15,
         expand=True,
         content=ft.Column([
             ft.Text("0/0 converted", ref=conv_files_proc_text, size=14, weight=ft.FontWeight.W_500, color=ft.Colors.ON_SURFACE_VARIANT, visible=False),
-            ft.Text("Progress", size=48, weight=ft.FontWeight.W_900, color=ft.Colors.WHITE),
+            ft.Text("Progress", size=48, weight=ft.FontWeight.W_900, color=ft.Colors.ON_SURFACE),
             ft.Row([
                 ft.Text("Time remaining : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
-                ft.Text("---", ref=conv_time_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ft.Text("---", ref=conv_time_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
                 ft.VerticalDivider(width=20, color=ft.Colors.TRANSPARENT),
                 ft.Text("Speed : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
-                ft.Text("---", ref=conv_fps_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ft.Text("---", ref=conv_fps_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
                 ft.VerticalDivider(width=20, color=ft.Colors.TRANSPARENT),
                 ft.Text("Percentage : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
-                ft.Text("0%", ref=conv_pct_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ft.Text("0%", ref=conv_pct_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
             ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             ft.Container(
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE),
                 height=6,
                 border_radius=3,
                 alignment=ft.Alignment.CENTER_LEFT,
@@ -1899,11 +1902,11 @@ async def main(page: ft.Page):
     )
 
     conv_preview_side = ft.Container(
-        bgcolor=ft.Colors.BLACK_26,
+        bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
         border_radius=15,
         border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
         padding=15,
-        clip_behavior=ft.ClipBehavior.HARD_EDGE,
+        clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
         content=ft.Column([
             ft.Row([
                 ft.Icon(ft.Icons.REMOVE_RED_EYE_OUTLINED, size=20, color=ft.Colors.PRIMARY),
@@ -1922,17 +1925,17 @@ async def main(page: ft.Page):
                     ),
                     ft.Container(
                         ref=conv_status_overlay,
-                        bgcolor=ft.Colors.with_opacity(0.2, ft.Colors.BLACK),
+                        bgcolor=ft.Colors.with_opacity(0.7, ft.Colors.SURFACE_CONTAINER_HIGHEST),
                         blur=50,
                         border_radius=10,
                         opacity=0,
                         visible=True,
                         alignment=ft.Alignment.CENTER,
                         expand=True,
-                        content=ft.Text(ref=conv_status_text, value="", size=28, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
+                        content=ft.Text(ref=conv_status_text, value="", size=28, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE)
                     )
                 ], expand=True),
-                alignment=ft.Alignment.CENTER, expand=True, bgcolor=ft.Colors.BLACK_12, border_radius=12
+                alignment=ft.Alignment.CENTER, expand=True, bgcolor=ft.Colors.TRANSPARENT, border_radius=12, clip_behavior=ft.ClipBehavior.ANTI_ALIAS
             )
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, expand=True)
     )
@@ -2677,7 +2680,7 @@ async def main(page: ft.Page):
             horizontal_alignment=ft.CrossAxisAlignment.STRETCH
         ),
         expand=True,
-        bgcolor=ft.Colors.BLACK_26,
+        bgcolor=ft.Colors.SURFACE_CONTAINER,
         border_radius=15,
         border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
         padding=15,
@@ -2694,7 +2697,7 @@ async def main(page: ft.Page):
     # Preview side - uses Video player for trimmed preview
 
     trim_preview_side = ft.Container(
-        bgcolor=ft.Colors.BLACK_26,
+        bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
         border_radius=15,
         border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
         padding=15,
@@ -2742,7 +2745,7 @@ async def main(page: ft.Page):
                     # Processing Overlay layer
                     ft.Container(
                         ref=trim_processing_overlay,
-                        bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
+                        bgcolor=ft.Colors.with_opacity(0.7, ft.Colors.SURFACE_CONTAINER_HIGHEST),
                         blur=15,
                         border_radius=10,
                         opacity=0,
@@ -2761,9 +2764,9 @@ async def main(page: ft.Page):
                 ], expand=True, alignment=ft.Alignment.CENTER),
                 alignment=ft.Alignment.CENTER, 
                 expand=True, 
-                bgcolor=ft.Colors.BLACK_12, 
+                bgcolor=ft.Colors.TRANSPARENT,
                 border_radius=12,
-                clip_behavior=ft.ClipBehavior.HARD_EDGE
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS
             )
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, expand=True)
     )
@@ -3139,7 +3142,7 @@ async def main(page: ft.Page):
 
     merger_segments_scrollable = ft.Container(
         content=ft.Column(ref=merger_segments_list, controls=[ft.Container(content=ft.Text("Click + to add videos to merge", size=14, color=ft.Colors.ON_SURFACE_VARIANT, italic=True), alignment=ft.Alignment.CENTER, padding=30)], scroll=ft.ScrollMode.AUTO),
-        expand=True, bgcolor=ft.Colors.BLACK_26, border_radius=15, border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT), padding=15
+        expand=True, bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE), border_radius=15, border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT), padding=15
     )
 
     merger_left_side = ft.Container(
@@ -3165,14 +3168,14 @@ async def main(page: ft.Page):
                     ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
                     ft.Row([
                         ft.Text("Time remaining : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
-                        ft.Text("---", ref=merger_status_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                        ft.Text("---", ref=merger_status_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
                         ft.VerticalDivider(width=20, color=ft.Colors.TRANSPARENT),
                         ft.Text("Percentage : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
-                        ft.Text("0%", ref=merger_pct_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                        ft.Text("0%", ref=merger_pct_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
                     ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                     ft.Container(
                         ref=merger_progress_container,
-                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE),
                         height=6,
                         border_radius=3,
                         alignment=ft.Alignment.CENTER_LEFT,
@@ -3198,7 +3201,7 @@ async def main(page: ft.Page):
     )
 
     merger_preview_side = ft.Container(
-        bgcolor=ft.Colors.BLACK_26, 
+        bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE), 
         border_radius=15, 
         border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT), 
         padding=15, 
@@ -3236,14 +3239,14 @@ async def main(page: ft.Page):
                     )
                 ], expand=True, alignment=ft.Alignment.CENTER), 
                 expand=True, 
-                bgcolor=ft.Colors.BLACK_12, 
+                bgcolor=ft.Colors.TRANSPARENT, 
                 border_radius=12, 
-                clip_behavior=ft.ClipBehavior.HARD_EDGE
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS
             )
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, expand=True)
     )
 
-    merger_content_row = ft.Row([merger_left_side, ft.Container(ref=merger_preview_container, content=merger_preview_side, width=400, visible=True, clip_behavior=ft.ClipBehavior.HARD_EDGE)], spacing=20, expand=True)
+    merger_content_row = ft.Row([merger_left_side, ft.Container(ref=merger_preview_container, content=merger_preview_side, width=400, visible=True, clip_behavior=ft.ClipBehavior.ANTI_ALIAS)], spacing=20, expand=True)
 
     merger_view_col = ft.Column([
         merger_file_section,
@@ -3289,18 +3292,139 @@ async def main(page: ft.Page):
     more_view_col = ft.Column([
         ft.Container(
             content=ft.Column([
-                ft.Icon(ft.Icons.AUTO_AWESOME_MOTION_ROUNDED, size=80, color=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
-                ft.Text("More Features Coming Soon", size=24, weight=ft.FontWeight.W_900, color=ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE)),
-                ft.Text("New Features will appear here!", size=16, color=ft.Colors.with_opacity(0.3, ft.Colors.ON_SURFACE)),
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, spacing=10),
+                ft.Text("App", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
+                ft.Divider(height=10, thickness=1, color=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+                ft.Row([
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Icon(ft.Icons.SETTINGS_ROUNDED, size=30, color=ft.Colors.PRIMARY),
+                            ft.Text("App Settings", size=14, weight=ft.FontWeight.W_600),
+                        ], alignment=ft.MainAxisAlignment.CENTER, spacing=5, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        width=150,
+                        height=100,
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        border_radius=15,
+                        alignment=ft.Alignment.CENTER,
+                        ink=True,
+                        on_click=lambda _: set_tab("settings"),
+                    ),
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Icon(ft.Icons.INFO_ROUNDED, size=30, color=ft.Colors.PRIMARY),
+                            ft.Text("About", size=14, weight=ft.FontWeight.W_600),
+                        ], alignment=ft.MainAxisAlignment.CENTER, spacing=5, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        width=150,
+                        height=100,
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        border_radius=15,
+                        alignment=ft.Alignment.CENTER,
+                        ink=True,
+                        on_click=lambda _: set_tab("about"),
+                    ),
+                ], spacing=15, alignment=ft.MainAxisAlignment.CENTER),
+                
+                ft.Divider(height=40, color=ft.Colors.TRANSPARENT),
+                
+                # Placeholder for other sections
+                ft.Icon(ft.Icons.AUTO_AWESOME_MOTION_ROUNDED, size=40, color=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE)),
+                ft.Text("More tools coming soon...", size=14, color=ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE)),
+                
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+            padding=30,
             expand=True,
-            alignment=ft.Alignment.CENTER
         )
     ], 
-    alignment=ft.MainAxisAlignment.CENTER,
     visible=True, 
     expand=True,
     offset=ft.Offset(4, 0),
+    animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
+    )
+
+    def toggle_theme(e):
+        page.theme_mode = ft.ThemeMode.LIGHT if e.control.value == False else ft.ThemeMode.DARK
+        # Update color accents
+        if page.theme_mode == ft.ThemeMode.LIGHT:
+            page.theme.color_scheme_seed = ft.Colors.BLUE_GREY
+        else:
+            page.theme.color_scheme_seed = ft.Colors.INDIGO_ACCENT
+        page.update()
+
+    # --- Settings View ---
+    settings_view_col = ft.Column([
+        ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.IconButton(
+                        icon=ft.Icons.ARROW_BACK_ROUNDED,
+                        on_click=lambda _: set_tab("more"),
+                        icon_size=20,
+                        style=ft.ButtonStyle(shape=ft.CircleBorder(), padding=10)
+                    ),
+                    ft.Text("Settings", size=20, weight=ft.FontWeight.BOLD),
+                ], spacing=10),
+                
+                ft.Divider(height=10, thickness=1, color=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+                
+                ft.Column([
+                    ft.Text("Appearance", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Row([
+                                ft.Icon(ft.Icons.DARK_MODE_ROUNDED, size=20, color=ft.Colors.ON_SURFACE_VARIANT),
+                                ft.Column([
+                                    ft.Text("Dark Mode", size=16, weight=ft.FontWeight.W_600),
+                                    ft.Text("Switch application theme (Note : Light mode is currently not perfect).", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                                ], spacing=0),
+                            ], spacing=15),
+                            ft.Switch(
+                                ref=setting_theme_switch,
+                                value=True, # Dark mode by default
+                                on_change=toggle_theme,
+                                active_color=ft.Colors.PRIMARY
+                            )
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        padding=ft.padding.all(20),
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        border_radius=15,
+                    ),
+                ], spacing=10),
+                
+                ft.Container(expand=True), # Spacer
+            ], spacing=25),
+            padding=30,
+            expand=True
+        )
+    ], 
+    visible=True, 
+    expand=True,
+    offset=ft.Offset(5, 0),
+    animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
+    )
+
+    # --- About View ---
+    about_view_col = ft.Column([
+        ft.Container(
+            content=ft.Column([
+                ft.Container(
+                    content=ft.Column([
+                        ft.Image(src="Icon.svg", width=100, height=100),
+                        ft.Text("Video Utilities", size=28, weight=ft.FontWeight.W_900),
+                        ft.Text(f"Version {APP_VERSION}", size=16, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
+                        ft.Text("A premium toolset for video processing.", size=16, italic=True),
+                        ft.Text("Built with Flet and FFmpeg.", size=14, color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE)),
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+                    expand=True,
+                    alignment=ft.Alignment.CENTER
+                )
+            ], spacing=20),
+            padding=30,
+            expand=True
+        )
+    ], 
+    visible=True, 
+    expand=True,
+    offset=ft.Offset(6, 0),
     animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
     )
 
@@ -3353,57 +3477,35 @@ async def main(page: ft.Page):
         if current_tab == name: return
         current_tab = name
         
-        # Slide Indicator
+        # Slide Indicator (Only 5 positions)
         if tab_indicator.current:
-            if name == "compressor":
-                tab_indicator.current.left = 0
-            elif name == "converter":
-                tab_indicator.current.left = TAB_WIDTH
-            elif name == "trimmer":
-                tab_indicator.current.left = TAB_WIDTH * 2
-            elif name == "merger":
-                tab_indicator.current.left = TAB_WIDTH * 3
+            pos_map = {
+                "compressor": 0, "converter": 1, "trimmer": 2, "merger": 3, "more": 4
+            }
+            if name in pos_map:
+                tab_indicator.current.left = TAB_WIDTH * pos_map[name]
+                tab_indicator.current.opacity = 1
             else:
-                tab_indicator.current.left = TAB_WIDTH * 4
+                # Sub-views (settings/about) - hide the indicator
+                tab_indicator.current.opacity = 0
             tab_indicator.current.update()
             
-        # Switch View with Animation
-        if name == "compressor":
-            compressor_view_col.offset = ft.Offset(0, 0)
-            converter_view_col.offset = ft.Offset(1, 0)
-            trimmer_view_col.offset = ft.Offset(2, 0)
-            merger_view_col.offset = ft.Offset(3, 0)
-            more_view_col.offset = ft.Offset(4, 0)
-        elif name == "converter":
-            compressor_view_col.offset = ft.Offset(-1, 0)
-            converter_view_col.offset = ft.Offset(0, 0)
-            trimmer_view_col.offset = ft.Offset(1, 0)
-            merger_view_col.offset = ft.Offset(2, 0)
-            more_view_col.offset = ft.Offset(3, 0)
-        elif name == "trimmer":
-            compressor_view_col.offset = ft.Offset(-2, 0)
-            converter_view_col.offset = ft.Offset(-1, 0)
-            trimmer_view_col.offset = ft.Offset(0, 0)
-            merger_view_col.offset = ft.Offset(1, 0)
-            more_view_col.offset = ft.Offset(2, 0)
-        elif name == "merger":
-            compressor_view_col.offset = ft.Offset(-3, 0)
-            converter_view_col.offset = ft.Offset(-2, 0)
-            trimmer_view_col.offset = ft.Offset(-1, 0)
-            merger_view_col.offset = ft.Offset(0, 0)
-            more_view_col.offset = ft.Offset(1, 0)
-        else: # more
-            compressor_view_col.offset = ft.Offset(-4, 0)
-            converter_view_col.offset = ft.Offset(-3, 0)
-            trimmer_view_col.offset = ft.Offset(-2, 0)
-            merger_view_col.offset = ft.Offset(-1, 0)
-            more_view_col.offset = ft.Offset(0, 0)
-            
-        compressor_view_col.update()
-        converter_view_col.update()
-        trimmer_view_col.update()
-        merger_view_col.update()
-        more_view_col.update()
+        # Switch View with Animation (Full 7-slot stack)
+        offsets = {
+            "compressor": 0, "converter": 1, "trimmer": 2, "merger": 3, 
+            "more": 4, "settings": 5, "about": 6
+        }
+        target_idx = offsets.get(name, 0)
+        
+        # Apply offsets to all views
+        views = [
+            compressor_view_col, converter_view_col, trimmer_view_col, 
+            merger_view_col, more_view_col, settings_view_col, about_view_col
+        ]
+        
+        for i, view in enumerate(views):
+            view.offset = ft.Offset(i - target_idx, 0)
+            view.update()
         
         update_tabs()
 
@@ -3503,7 +3605,9 @@ async def main(page: ft.Page):
                         converter_view_col,
                         trimmer_view_col,
                         merger_view_col,
-                        more_view_col
+                        more_view_col,
+                        settings_view_col,
+                        about_view_col
                     ]),
                     expand=True,
                     clip_behavior=ft.ClipBehavior.HARD_EDGE
