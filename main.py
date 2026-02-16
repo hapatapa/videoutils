@@ -13,6 +13,8 @@ def start_app():
 
     # Delayed imports to avoid import-time side effects in sub-processes
     import flet as ft
+    import flet_video # Explicit import for bundling
+    import playsound # Explicit import for bundling
     import gui
 
     if "--cli" in sys.argv:

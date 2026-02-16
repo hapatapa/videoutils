@@ -1,7 +1,7 @@
 flet==0.80.2
 flet-video==0.80.2
 playsound==1.2.2
-PyGObject; sys_platform == 'linux'
+PyGObject==3.48.2; sys_platform == 'linux'
 httpcore>=1.0.8
 httpx>=0.28.1
 
