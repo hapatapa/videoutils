@@ -1,5 +1,7 @@
 flet==0.80.2
 flet-video==0.80.2
+playsound==1.2.2
+PyGObject
 httpcore>=1.0.8
 httpx>=0.28.1
 

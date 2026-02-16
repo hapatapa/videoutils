@@ -12,8 +12,55 @@ import flet as ft
 from flet_video import Video, VideoMedia, PlaylistMode
 import shutil
 import compressor_logic as logic
+import json
+from playsound import playsound
 
 APP_VERSION = "Dev Build"
+
+# --- Settings Management ---
+if os.name == 'nt':
+    CONFIG_DIR = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'video-utilities')
+else:
+    CONFIG_DIR = os.path.expanduser('~/.config/video-utilities')
+
+os.makedirs(CONFIG_DIR, exist_ok=True)
+SETTINGS_FILE = os.path.join(CONFIG_DIR, 'preferences.json')
+
+DEFAULT_SETTINGS = {
+    "theme_mode": "dark",
+    "accent_color": "INDIGO_ACCENT",
+    "auto_open_folder": False,
+    "play_ding": True
+}
+
+def load_settings():
+    try:
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                settings = json.load(f)
+            validated = DEFAULT_SETTINGS.copy()
+            for key in DEFAULT_SETTINGS:
+                if key in settings and isinstance(settings[key], type(DEFAULT_SETTINGS[key])):
+                    validated[key] = settings[key]
+            return validated
+    except: pass
+    return DEFAULT_SETTINGS.copy()
+
+def save_settings(settings):
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(settings, f, indent=4)
+    except: pass
+
+def open_folder(path):
+    try:
+        if not path: return
+        folder = os.path.dirname(path) if os.path.isfile(path) else path
+        if not os.path.exists(folder): return
+        if os.name == 'nt': os.startfile(folder)
+        elif sys.platform == 'darwin': subprocess.Popen(['open', folder])
+        else: subprocess.Popen(['xdg-open', folder])
+    except: pass
 
 # Logic to prevent console windows from popping up on Windows
 SUBPROCESS_FLAGS = 0
@@ -42,23 +89,49 @@ async def main(page: ft.Page):
         
     os.makedirs(temp_dir, exist_ok=True)
     
+    # Load settings
+    user_settings = load_settings()
+    
+    # Trace log setup
     log_path = os.path.join(temp_dir, "trace.log")
     try:
         with open(log_path, "w") as f: f.write("Main started\n"); f.flush()
     except Exception as e:
         print(f"Failed to write log: {e}")
+
     current_tab = ""
     page.title = "Video Utilities"
-    page.theme_mode = ft.ThemeMode.DARK
+    
+    # Set Theme Mode
+    page.theme_mode = ft.ThemeMode.DARK if user_settings.get("theme_mode") == "dark" else ft.ThemeMode.LIGHT
+    
     page.fonts = {
         "Roboto Flex": "https://raw.githubusercontent.com/google/fonts/main/ofl/robotoflex/RobotoFlex%5BGRAD%2COops%2CYOPQ%2CYTLC%2CYTAS%2CYTDE%2CYTFI%2CYTUC%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf"
     }
+    
+    # Set Accent Color
+    accent_name = user_settings.get("accent_color", "INDIGO_ACCENT")
     page.theme = ft.Theme(
         font_family="Roboto Flex",
-        color_scheme_seed=ft.Colors.INDIGO_ACCENT
+        color_scheme_seed=getattr(ft.Colors, accent_name, ft.Colors.INDIGO_ACCENT)
     )
-    page.padding = 15
+    
+    # Audio for Notification
+    def play_complete_ding():
+        if user_settings.get("play_ding", True):
+            sound_path = os.path.join(page.assets_dir, "success.ogg")
+            if os.path.exists(sound_path):
+                try:
+                    # Run in thread to not block UI
+                    threading.Thread(target=lambda: playsound(sound_path), daemon=True).start()
+                except: pass
 
+    # Window Initialization
+    page.window.title_bar_hidden = True
+    page.window.title_bar_buttons_hidden = True
+    page.window.frameless = True
+    page.padding = 0
+    
     page.window.min_width = 1143
     page.window.min_height = 841
     page.window.resizable = True
@@ -1029,6 +1102,9 @@ async def main(page: ft.Page):
             elif successful_count == total_files:
                 msg = "✨ SUCCESS!"
                 log(f"\n✨ ALL DONE! {successful_count}/{total_files} files compressed successfully!")
+                play_complete_ding()
+                if user_settings.get("auto_open_folder") and target_output_path:
+                    open_folder(target_output_path)
             elif successful_count > 0:
                 msg = f"⚠️ PARTIAL ({successful_count}/{total_files})"
                 log(f"\n⚠️ Completed {successful_count}/{total_files} files.")
@@ -1745,6 +1821,9 @@ async def main(page: ft.Page):
                          conv_status_text.current.value = "Done!"
                          conv_status_overlay.current.opacity = 1
                          conv_status_overlay.current.update()
+                         play_complete_ding()
+                         if user_settings.get("auto_open_folder") and conv_target_path:
+                             open_folder(conv_target_path)
                  else:
                      log(f"❌ FFmpeg Error: {''.join(lines[-5:])}")
                      if conv_status_text.current:
@@ -2467,6 +2546,9 @@ async def main(page: ft.Page):
                     shutil.move(temp_files[0], output_path)
                     log(f"✅ Success! Saved to: {os.path.basename(output_path)}")
                     show_success(f"Removed {len(sorted_segments)} segment(s) successfully!")
+                    play_complete_ding()
+                    if user_settings.get("auto_open_folder"):
+                        open_folder(output_path)
                 else:
                     # Multiple segments, concatenate them
                     concat_file = os.path.join(base_dir, "_concat_list.txt")
@@ -2489,6 +2571,9 @@ async def main(page: ft.Page):
                     if result.returncode == 0:
                         log(f"✅ Success! Saved to: {os.path.basename(output_path)}")
                         show_success(f"Removed {len(sorted_segments)} segment(s) successfully!")
+                        play_complete_ding()
+                        if user_settings.get("auto_open_folder"):
+                            open_folder(output_path)
                     else:
                         show_error("Concat failed", result.stderr)
                         log(f"❌ Failed: {result.stderr}")
@@ -2969,6 +3054,9 @@ async def main(page: ft.Page):
                 success, result = logic.merge_videos(video_paths, merger_target_path, merger_log, stop_event=merger_stop_event)
                 if success:
                     merger_log(f"✨ MERGE SUCCESS: {result}")
+                    play_complete_ding()
+                    if user_settings.get("auto_open_folder"):
+                        open_folder(merger_target_path)
                 else:
                     merger_log(f"❌ MERGE FAILED: {result}")
             finally:
@@ -3341,65 +3429,115 @@ async def main(page: ft.Page):
     )
 
     def toggle_theme(e):
-        page.theme_mode = ft.ThemeMode.LIGHT if e.control.value == False else ft.ThemeMode.DARK
-        # Update color accents
-        if page.theme_mode == ft.ThemeMode.LIGHT:
-            page.theme.color_scheme_seed = ft.Colors.BLUE_GREY
-        else:
-            page.theme.color_scheme_seed = ft.Colors.INDIGO_ACCENT
+        is_dark = e.control.value
+        page.theme_mode = ft.ThemeMode.DARK if is_dark else ft.ThemeMode.LIGHT
+        user_settings["theme_mode"] = "dark" if is_dark else "light"
+        
+        # Reset color seed based on standard or custom
+        curr_accent = user_settings.get("accent_color", "INDIGO_ACCENT")
+        page.theme.color_scheme_seed = getattr(ft.Colors, curr_accent, ft.Colors.INDIGO_ACCENT)
+        
+        save_settings(user_settings)
+        page.update()
+
+    def toggle_setting(key, e):
+        user_settings[key] = e.control.value
+        save_settings(user_settings)
+
+    def set_accent_color(color_name):
+        user_settings["accent_color"] = color_name
+        page.theme.color_scheme_seed = getattr(ft.Colors, color_name)
+        save_settings(user_settings)
         page.update()
 
     # --- Settings View ---
+    setting_auto_open_switch = ft.Switch(value=user_settings.get("auto_open_folder", False), on_change=lambda e: toggle_setting("auto_open_folder", e), active_color=ft.Colors.PRIMARY)
+    setting_ding_switch = ft.Switch(value=user_settings.get("play_ding", True), on_change=lambda e: toggle_setting("play_ding", e), active_color=ft.Colors.PRIMARY)
+
+    def color_dot(color_name, real_color):
+        return ft.Container(
+            width=30, height=30, bgcolor=real_color, border_radius=15,
+            ink=True, on_click=lambda _: set_accent_color(color_name),
+            tooltip=color_name.replace("_", " ").title()
+        )
+
     settings_view_col = ft.Column([
         ft.Container(
             content=ft.Column([
                 ft.Row([
-                    ft.IconButton(
-                        icon=ft.Icons.ARROW_BACK_ROUNDED,
-                        on_click=lambda _: set_tab("more"),
-                        icon_size=20,
-                        style=ft.ButtonStyle(shape=ft.CircleBorder(), padding=10)
-                    ),
+                    ft.IconButton(ft.Icons.ARROW_BACK_ROUNDED, on_click=lambda _: set_tab("more"), icon_size=20),
                     ft.Text("Settings", size=20, weight=ft.FontWeight.BOLD),
                 ], spacing=10),
                 
                 ft.Divider(height=10, thickness=1, color=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
                 
+                # Appearance section
                 ft.Column([
                     ft.Text("Appearance", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
                     ft.Container(
-                        content=ft.Row([
+                        content=ft.Column([
                             ft.Row([
-                                ft.Icon(ft.Icons.DARK_MODE_ROUNDED, size=20, color=ft.Colors.ON_SURFACE_VARIANT),
-                                ft.Column([
-                                    ft.Text("Dark Mode", size=16, weight=ft.FontWeight.W_600),
-                                    ft.Text("Switch application theme (Note : Light mode is currently not perfect).", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-                                ], spacing=0),
-                            ], spacing=15),
-                            ft.Switch(
-                                ref=setting_theme_switch,
-                                value=True, # Dark mode by default
-                                on_change=toggle_theme,
-                                active_color=ft.Colors.PRIMARY
-                            )
-                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        padding=ft.padding.all(20),
-                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-                        border_radius=15,
+                                ft.Row([
+                                    ft.Icon(ft.Icons.DARK_MODE_ROUNDED, size=20),
+                                    ft.Column([
+                                        ft.Text("Dark Mode", size=16, weight=ft.FontWeight.W_600),
+                                        ft.Text("Switch application theme.", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                                    ], spacing=0),
+                                ], spacing=15),
+                                ft.Switch(ref=setting_theme_switch, value=(user_settings.get("theme_mode")=="dark"), on_change=toggle_theme, active_color=ft.Colors.PRIMARY)
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                            ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+                            ft.Text("Accent Color", size=14, weight=ft.FontWeight.W_600),
+                            ft.Row([
+                                color_dot("INDIGO_ACCENT", ft.Colors.INDIGO_ACCENT),
+                                color_dot("BLUE", ft.Colors.BLUE),
+                                color_dot("TEAL", ft.Colors.TEAL),
+                                color_dot("GREEN", ft.Colors.GREEN),
+                                color_dot("AMBER", ft.Colors.AMBER),
+                                color_dot("DEEP_ORANGE", ft.Colors.DEEP_ORANGE),
+                                color_dot("PINK", ft.Colors.PINK),
+                            ], spacing=10),
+                        ]),
+                        padding=20, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST, border_radius=15,
+                    ),
+                ], spacing=10),
+
+                # Behavior section
+                ft.Column([
+                    ft.Text("Behavior", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Row([
+                                ft.Row([
+                                    ft.Icon(ft.Icons.FOLDER_OPEN_ROUNDED, size=20),
+                                    ft.Column([
+                                        ft.Text("Auto-Open Folder", size=16, weight=ft.FontWeight.W_600),
+                                        ft.Text("Open destination folder after task completion.", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                                    ], spacing=0),
+                                ], spacing=15),
+                                setting_auto_open_switch
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                            # Notification Sound Toggle (Enabled via playsound library)
+                            ft.Row([
+                                ft.Row([
+                                    ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE_ROUNDED, size=20),
+                                    ft.Column([
+                                        ft.Text("Notification Sound", size=16, weight=ft.FontWeight.W_600),
+                                        ft.Text("Play a sound when a task finishes.", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                                    ], spacing=0),
+                                ], spacing=15),
+                                setting_ding_switch
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ]),
+                        padding=20, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST, border_radius=15,
                     ),
                 ], spacing=10),
                 
-                ft.Container(expand=True), # Spacer
+                ft.Container(expand=True),
             ], spacing=25),
-            padding=30,
-            expand=True
+            padding=30, expand=True
         )
-    ], 
-    visible=True, 
-    expand=True,
-    offset=ft.Offset(5, 0),
-    animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
-    )
+    ], visible=True, expand=True, offset=ft.Offset(5, 0), animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO))
 
     # --- About View ---
     about_view_col = ft.Column([
@@ -3588,34 +3726,95 @@ async def main(page: ft.Page):
         margin=ft.Margin.all(0)
     )
 
-    page.add(
-        ft.Container(
-            content=ft.Column([
-                # Header (Centered Tabs)
-                ft.Stack([
-                    ft.Row([tab_bar], alignment=ft.MainAxisAlignment.CENTER),
-                ], height=TAB_HEIGHT, clip_behavior=ft.ClipBehavior.NONE),
-                
-                ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
-                
-                # Main Views (Clipped Container for Slide Transition)
-                ft.Container(
-                    content=ft.Stack([
-                        compressor_view_col,
-                        converter_view_col,
-                        trimmer_view_col,
-                        merger_view_col,
-                        more_view_col,
-                        settings_view_col,
-                        about_view_col
+    # Window Actions
+    # Window Actions (Sync for snappier response)
+    def window_minimize(e):
+        page.window.minimized = True
+        page.update()
+
+    def window_toggle_maximize(e):
+        page.window.maximized = not page.window.maximized
+        page.update()
+
+    def window_close(e):
+        page.window.close()
+
+    title_bar = ft.Container(
+        bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+        height=35,
+        content=ft.Row([
+            # Draggable portion (Icon + Title + Empty Space)
+            ft.WindowDragArea(
+                content=ft.Container(
+                    content=ft.Row([
+                        ft.Row([
+                            ft.Image(src="Icon.png", width=18, height=18),
+                            ft.Text("Video Utilities", size=11, weight=ft.FontWeight.W_600, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ], spacing=10),
+                        ft.Container(expand=True), # Spacer for dragging the whole bar
                     ]),
-                    expand=True,
-                    clip_behavior=ft.ClipBehavior.HARD_EDGE
-                )
-            ], expand=True),
-            expand=True,
-            padding=ft.Padding.only(left=20, right=20, bottom=20, top=10)
-        )
+                    padding=ft.padding.only(left=15),
+                    expand=True
+                ),
+                expand=True
+            ),
+            
+            # Non-draggable portion (System Buttons)
+            ft.Row([
+                ft.IconButton(
+                    ft.Icons.REMOVE_ROUNDED, 
+                    icon_size=16, 
+                    on_click=window_minimize,
+                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=0), padding=5)
+                ),
+                ft.IconButton(
+                    ft.Icons.CROP_SQUARE_ROUNDED, 
+                    icon_size=14, 
+                    on_click=window_toggle_maximize,
+                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=0), padding=5)
+                ),
+                ft.IconButton(
+                    ft.Icons.CLOSE_ROUNDED, 
+                    icon_size=16, 
+                    on_click=window_close,
+                    hover_color=ft.Colors.RED_400,
+                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=0), padding=5)
+                ),
+            ], spacing=0)
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, spacing=0),
+    )
+
+    page.add(
+        ft.Column([
+            title_bar,
+            ft.Container(
+                content=ft.Column([
+                    # Header (Centered Tabs)
+                    ft.Stack([
+                        ft.Row([tab_bar], alignment=ft.MainAxisAlignment.CENTER),
+                    ], height=TAB_HEIGHT, clip_behavior=ft.ClipBehavior.NONE),
+                    
+                    ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
+                    
+                    # Main Views (Clipped Container for Slide Transition)
+                    ft.Container(
+                        content=ft.Stack([
+                            compressor_view_col,
+                            converter_view_col,
+                            trimmer_view_col,
+                            merger_view_col,
+                            more_view_col,
+                            settings_view_col,
+                            about_view_col
+                        ]),
+                        expand=True,
+                        clip_behavior=ft.ClipBehavior.HARD_EDGE
+                    )
+                ], expand=True),
+                expand=True,
+                padding=15
+            )
+        ], expand=True, spacing=0)
     )
 
     # Initialize first tab
