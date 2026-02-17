@@ -13,17 +13,23 @@ def start_app():
 
     # Delayed imports to avoid import-time side effects in sub-processes
     import flet as ft
-    import flet_video # Explicit import for bundling
-    import playsound # Explicit import for bundling
+    import flet_video
+    import playsound
     import gui
 
     if "--cli" in sys.argv:
         gui.run_cli()
     else:
-        # Modern Flet Launch
-        assets_path = os.path.join(os.path.dirname(__file__), "assets")
+        # Resolve Assets Path for Bundled/Standalone Executables
+        if hasattr(sys, "_MEIPASS"):
+            # PyInstaller/flet pack environment
+            assets_path = os.path.join(sys._MEIPASS, "assets")
+        else:
+            # Development environment
+            assets_path = os.path.join(os.path.dirname(__file__), "assets")
+            
         if not os.path.exists(assets_path):
-            assets_path = "assets" # Fallback
+            assets_path = "assets" 
             
         # Official Flet Launch
         ft.run(

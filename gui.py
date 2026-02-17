@@ -126,15 +126,26 @@ async def main(page: ft.Page):
                     threading.Thread(target=lambda: playsound(sound_path), daemon=True).start()
                 except: pass
 
-    # Window Initialization
-    page.window_title_bar_hidden = True
-    page.window_title_bar_buttons_hidden = True
+    # Window Initialization (Flet 0.80.2 Compatible)
+    try:
+        # Modern Style (introduced around 0.80.2)
+        page.window.title_bar_hidden = True
+        page.window.title_bar_buttons_hidden = True
+        # On Windows, title_bar_hidden sometimes needs frameless for the custom ones to work
+        if sys.platform == "win32":
+            page.window.frameless = True
+    except:
+        # Legacy Style 
+        try:
+            page.window_title_bar_hidden = True
+            page.window_title_bar_buttons_hidden = True
+        except: pass
+
     page.padding = 0
-    
-    page.window_min_width = 1143
-    page.window_min_height = 841
-    page.window_resizable = True
-    page.window_icon = "Icon.png"
+    page.window.min_width = 1143
+    page.window.min_height = 841
+    page.window.resizable = True
+    page.window.icon = "Icon.png"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
     # --- Cleanup Logic ---
@@ -3727,37 +3738,66 @@ async def main(page: ft.Page):
 
     # Window Actions
     # Window Actions (Optimized for Linux)
-    def window_minimize(e):
-        page.window_minimize()
-
-    def window_toggle_maximize(e):
-        if page.window_maximized:
-            page.window_maximized = False
-        else:
-            page.window_maximized = True
+    # Window Actions (Robust and Flet-Version Agnostic)
+    # Window Actions (Robust and Async for Flet 0.80.2)
+    async def window_minimize(e):
+        try:
+            res = page.window.minimize()
+            import inspect
+            if inspect.iscoroutine(res): await res
+        except: 
+            page.window.minimized = True
         page.update()
 
-    def window_close(e):
-        page.window_destroy()
+    async def window_toggle_maximize(e):
+        try:
+            if hasattr(page, "window") and hasattr(page.window, "maximized"):
+                page.window.maximized = not page.window.maximized
+            elif hasattr(page, "window_maximized"):
+                page.window_maximized = not page.window_maximized
+            else:
+                res = page.window_maximize()
+                import inspect
+                if inspect.iscoroutine(res): await res
+        except:
+            try: page.window_maximize()
+            except: pass
+        page.update()
 
-    title_bar = ft.Stack([
-        # Draggable Background (Full width/height)
-        ft.WindowDragArea(
-            content=ft.Container(
-                bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
-                height=35,
-                expand=True
-            ),
-        ),
-        # Button/UI Overlay
-        ft.Container(
+    async def window_close(e):
+        # Manually trigger cleanup before destruction to be safe
+        try: cleanup_temp()
+        except: pass
+        
+        # Try different ways to close, awaiting if necessary
+        try:
+            import inspect
+            # Try window.destroy() first
+            try:
+                res = page.window.destroy()
+                if inspect.iscoroutine(res): await res
+            except:
+                # Fallback to window_destroy()
+                res = page.window_destroy()
+                if inspect.iscoroutine(res): await res
+        except: 
+            import os
+            os._exit(0)
+
+    # Title Bar - Single layer structure for better draggability
+    title_bar = ft.WindowDragArea(
+        content=ft.Container(
+            bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
             height=35,
             padding=ft.padding.only(left=15, right=5),
             content=ft.Row([
+                # Left side: Icon and Name
                 ft.Row([
                     ft.Image(src="Icon.png", width=18, height=18),
                     ft.Text("Video Utilities", size=11, weight=ft.FontWeight.W_600, color=ft.Colors.ON_SURFACE_VARIANT),
                 ], spacing=10),
+                
+                # Right side: Control Buttons
                 ft.Row([
                     ft.IconButton(
                         ft.Icons.REMOVE_ROUNDED, 
@@ -3781,7 +3821,7 @@ async def main(page: ft.Page):
                 ], spacing=0)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
         )
-    ], height=35)
+    )
 
     page.add(
         ft.Column([
