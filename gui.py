@@ -166,6 +166,52 @@ async def main(page: ft.Page):
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
+    async def window_minimize(e):
+        try:
+            res = page.window.minimize()
+            # Flet async check
+            import inspect
+            if inspect.iscoroutine(res): await res
+        except: 
+            page.window.minimized = True
+        page.update()
+
+    async def window_toggle_maximize(e):
+        try:
+            if hasattr(page, "window") and hasattr(page.window, "maximized"):
+                page.window.maximized = not page.window.maximized
+            elif hasattr(page, "window_maximized"):
+                page.window_maximized = not page.window_maximized
+            else:
+                res = page.window_maximize()
+                import inspect
+                if inspect.iscoroutine(res): await res
+        except:
+            try: page.window_maximize()
+            except: pass
+        page.update()
+
+    async def window_close(e=None):
+        # Manually trigger cleanup before destruction to be safe
+        try: cleanup_temp()
+        except: pass
+        
+        # Try different ways to close, awaiting if necessary
+        try:
+            import inspect
+            # Try window.destroy() first
+            try:
+                res = page.window.destroy()
+                if inspect.iscoroutine(res): await res
+            except:
+                # Fallback to window_destroy()
+                res = page.window_destroy()
+                if inspect.iscoroutine(res): await res
+        except: 
+            import os
+            # Note: sys is imported at top level
+            os._exit(0)
+
 
 
     # --- FFmpeg Installation Logic (Reusable) ---
@@ -204,16 +250,12 @@ async def main(page: ft.Page):
                 ff_modal.open = False
                 page.update()
                 
-                # Success Modal to restart
-                def close_app(e):
-                    page.window_close()
-
                 success_modal = ft.AlertDialog(
                     modal=True,
                     title=ft.Text("Installation Complete"),
                     content=ft.Text("FFmpeg has been successfully installed.\n\nPlease restart the application for changes to take effect."),
                     actions=[
-                        ft.TextButton("OK, Close App", on_click=close_app),
+                        ft.TextButton("OK, Close App", on_click=window_close),
                     ],
                     actions_alignment=ft.MainAxisAlignment.END,
                 )
@@ -3740,49 +3782,6 @@ async def main(page: ft.Page):
     # Window Actions (Optimized for Linux)
     # Window Actions (Robust and Flet-Version Agnostic)
     # Window Actions (Robust and Async for Flet 0.80.2)
-    async def window_minimize(e):
-        try:
-            res = page.window.minimize()
-            import inspect
-            if inspect.iscoroutine(res): await res
-        except: 
-            page.window.minimized = True
-        page.update()
-
-    async def window_toggle_maximize(e):
-        try:
-            if hasattr(page, "window") and hasattr(page.window, "maximized"):
-                page.window.maximized = not page.window.maximized
-            elif hasattr(page, "window_maximized"):
-                page.window_maximized = not page.window_maximized
-            else:
-                res = page.window_maximize()
-                import inspect
-                if inspect.iscoroutine(res): await res
-        except:
-            try: page.window_maximize()
-            except: pass
-        page.update()
-
-    async def window_close(e):
-        # Manually trigger cleanup before destruction to be safe
-        try: cleanup_temp()
-        except: pass
-        
-        # Try different ways to close, awaiting if necessary
-        try:
-            import inspect
-            # Try window.destroy() first
-            try:
-                res = page.window.destroy()
-                if inspect.iscoroutine(res): await res
-            except:
-                # Fallback to window_destroy()
-                res = page.window_destroy()
-                if inspect.iscoroutine(res): await res
-        except: 
-            import os
-            os._exit(0)
 
     # Title Bar - Single layer structure for better draggability
     title_bar = ft.WindowDragArea(
