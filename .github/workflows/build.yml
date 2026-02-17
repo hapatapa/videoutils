@@ -120,7 +120,7 @@ jobs:
       - name: Build Windows (Single Executable)
         run: |
           # Flet pack allows passing PyInstaller arguments after '--'
-          flet pack main.py --name "VideoUtilities-Windows" --yes --verbose -- --add-data "assets;assets" --collect-all flet_video --collect-all playsound
+          flet pack main.py --name "VideoUtilities-Windows" --yes --verbose --add-data "assets;assets"
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
