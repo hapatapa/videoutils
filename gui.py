@@ -3797,27 +3797,51 @@ async def main(page: ft.Page):
                 ], spacing=10),
                 
                 # Right side: Control Buttons
+                # Right side: Control Buttons
                 ft.Row([
                     ft.IconButton(
                         ft.Icons.REMOVE_ROUNDED, 
-                        icon_size=16, 
+                        icon_size=14, 
                         on_click=window_minimize,
-                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=0), padding=5)
+                        style=ft.ButtonStyle(
+                            shape=ft.StadiumBorder(),
+                            bgcolor={"": ft.Colors.PRIMARY, "hovered": "#B69DF8"},
+                            color={"": ft.Colors.ON_PRIMARY},
+                            animation_duration=300,
+                            padding=0
+                        ),
+                        width=40,
+                        height=26,
                     ),
                     ft.IconButton(
                         ft.Icons.CROP_SQUARE_ROUNDED, 
-                        icon_size=14, 
+                        icon_size=12, 
                         on_click=window_toggle_maximize,
-                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=0), padding=5)
+                        style=ft.ButtonStyle(
+                            shape=ft.StadiumBorder(),
+                            bgcolor={"": ft.Colors.PRIMARY, "hovered": "#B69DF8"},
+                            color={"": ft.Colors.ON_PRIMARY},
+                            animation_duration=300,
+                            padding=0
+                        ),
+                        width=40,
+                        height=26,
                     ),
                     ft.IconButton(
                         ft.Icons.CLOSE_ROUNDED, 
-                        icon_size=16, 
+                        icon_size=14, 
                         on_click=window_close,
-                        hover_color=ft.Colors.RED_400,
-                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=0), padding=5)
+                        style=ft.ButtonStyle(
+                            shape=ft.StadiumBorder(),
+                            bgcolor={"": ft.Colors.PRIMARY, "hovered": "#EF5350"},
+                            color={"": ft.Colors.ON_PRIMARY},
+                            animation_duration=300,
+                            padding=0
+                        ),
+                        width=40,
+                        height=26,
                     ),
-                ], spacing=0)
+                ], spacing=8)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
         )
     )
