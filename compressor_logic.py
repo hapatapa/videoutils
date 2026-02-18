@@ -581,7 +581,7 @@ def simple_convert(input_file, output_file, vcodec, acodec, log_func=print, prog
         log_func(f"❌ Conversion Error: {e}")
         return False, None
 
-def merge_videos(video_paths, output_path, log_func=print, stop_event=None):
+def merge_videos(video_paths, output_path, log_func=print, stop_event=None, use_gpu=True):
     """
     Merge multiple videos into one using the concat filter (re-encoding for compatibility).
     """
@@ -625,22 +625,41 @@ def merge_videos(video_paths, output_path, log_func=print, stop_event=None):
     for i in range(len(video_paths)):
         filter_complex += f"[v{i}][a{i}]"
     
-    filter_complex += f"concat=n={len(video_paths)}:v=1:a=1[outv][outa]"
-
-    # Try to use GPU encoder, fallback to software
-    video_encoder = get_encoder("h264", use_gpu=True, log_func=log_func)
+    filter_complex += f"concat=n={len(video_paths)}:v=1:a=1[outv_raw][outa]"
     
+    # Try to use GPU encoder, fallback to software
+    video_encoder = get_encoder("h264", use_gpu=use_gpu, log_func=log_func)
+    
+    hw_init = []
+    final_v_map = "[outv_raw]"
+    enc_args = ["-preset", "fast"]
+    
+    if "vaapi" in video_encoder:
+        hw_init = ["-vaapi_device", "/dev/dri/renderD128"]
+        filter_complex += f";[outv_raw]format=nv12,hwupload[outv]"
+        final_v_map = "[outv]"
+        enc_args = [] # VAAPI uses different speed controls
+    elif "nvenc" in video_encoder:
+        enc_args = ["-preset", "p4", "-rc", "vbr", "-cq", "23"]
+    elif "amf" in video_encoder:
+        enc_args = ["-rc", "vbr_peak", "-peak_bitrate", "5000k"]
+    else:
+        # Software encoder (libx264)
+        enc_args = ["-preset", "fast", "-crf", "23"]
+
     cmd = [
-        "ffmpeg", "-y"
+        "ffmpeg", "-y", "-hide_banner"
     ]
+    cmd.extend(hw_init)
     cmd.extend(inputs)
     cmd.extend([
         "-filter_complex", filter_complex,
-        "-map", "[outv]",
+        "-map", final_v_map,
         "-map", "[outa]",
-        "-c:v", video_encoder,
-        "-preset", "fast",
-        "-crf", "23",
+        "-c:v", video_encoder
+    ])
+    cmd.extend(enc_args)
+    cmd.extend([
         "-c:a", "aac",
         "-b:a", "192k",
         "-movflags", "+faststart",

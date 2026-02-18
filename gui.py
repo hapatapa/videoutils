@@ -14,6 +14,8 @@ import shutil
 import compressor_logic as logic
 import json
 from playsound import playsound
+import platform
+import urllib.parse
 
 APP_VERSION = "Dev Build"
 
@@ -30,8 +32,59 @@ DEFAULT_SETTINGS = {
     "theme_mode": "dark",
     "accent_color": "INDIGO_ACCENT",
     "auto_open_folder": False,
-    "play_ding": True
+    "play_ding": True,
+    "show_logs": False,
+    "use_gpu": True,
+    "follow_os_theme": False
 }
+
+def is_system_dark_mode():
+    try:
+        system = platform.system()
+        if system == "Windows":
+            try:
+                import winreg
+                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                return value == 0
+            except: pass
+        elif system == "Linux":
+            # 1. Check XDG Portal (Fastest & Modern Standard)
+            try:
+                res = subprocess.run([
+                    "dbus-send", "--print-reply", "--dest=org.freedesktop.portal.Desktop",
+                    "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Settings.Read",
+                    "string:org.freedesktop.appearance", "string:color-scheme"
+                ], capture_output=True, text=True, timeout=0.5)
+                if res.returncode == 0:
+                    if "uint32 1" in res.stdout: return True
+                    if "uint32 2" in res.stdout: return False
+            except: pass
+
+            # 2. Check environment variable (Instant)
+            gtk_env = os.environ.get('GTK_THEME', '').lower()
+            if 'dark' in gtk_env: return True
+            if 'light' in gtk_env: return False
+
+            # 3. Check GNOME/GTK via gsettings
+            try:
+                res = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"], capture_output=True, text=True, timeout=0.5)
+                if 'prefer-dark' in res.stdout: return True
+                if 'prefer-light' in res.stdout: return False
+                
+                res = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"], capture_output=True, text=True, timeout=0.5)
+                if 'dark' in res.stdout.lower(): return True
+                if 'light' in res.stdout.lower(): return False
+            except: pass
+            
+            # 4. Check KDE/Plasma
+            try:
+                res = subprocess.run(["kreadconfig5", "--group", "General", "--key", "ColorScheme"], capture_output=True, text=True, timeout=0.5)
+                if 'dark' in res.stdout.lower(): return True
+                if 'light' in res.stdout.lower(): return False
+            except: pass
+    except: pass
+    return True # Default to dark if detection fails or is uncertain
 
 def load_settings():
     try:
@@ -101,9 +154,36 @@ async def main(page: ft.Page):
 
     current_tab = ""
     page.title = "Video Utilities"
+    page.theme_animation = ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT)
     
     # Set Theme Mode
-    page.theme_mode = ft.ThemeMode.DARK if user_settings.get("theme_mode") == "dark" else ft.ThemeMode.LIGHT
+    if user_settings.get("follow_os_theme", False):
+        page.theme_mode = ft.ThemeMode.DARK if is_system_dark_mode() else ft.ThemeMode.LIGHT
+    else:
+        page.theme_mode = ft.ThemeMode.DARK if user_settings.get("theme_mode") == "dark" else ft.ThemeMode.LIGHT
+    
+    def theme_poll_loop():
+        # Small delay to ensure UI is ready
+        time.sleep(2)
+        last_poll_state = is_system_dark_mode()
+        while True:
+            time.sleep(3) # Check every 3 seconds
+            if user_settings.get("follow_os_theme", False):
+                current_dark = is_system_dark_mode()
+                if current_dark != last_poll_state:
+                    last_poll_state = current_dark
+                    page.theme_mode = ft.ThemeMode.DARK if current_dark else ft.ThemeMode.LIGHT
+                    # Update settings switch if it exists
+                    if setting_theme_switch.current:
+                        setting_theme_switch.current.value = current_dark
+                        setting_theme_switch.current.update()
+                    # Do NOT overwrite user_settings["theme_mode"] here to preserve manual preference
+                    page.update()
+            else:
+                # Sync state even if not following, to catch the next time it's enabled
+                last_poll_state = is_system_dark_mode()
+
+    threading.Thread(target=theme_poll_loop, daemon=True).start()
     
     page.fonts = {
         "Roboto Flex": "https://raw.githubusercontent.com/google/fonts/main/ofl/robotoflex/RobotoFlex%5BGRAD%2COops%2CYOPQ%2CYTLC%2CYTAS%2CYTDE%2CYTFI%2CYTUC%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf"
@@ -165,6 +245,8 @@ async def main(page: ft.Page):
     
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
+
+
 
     async def window_minimize(e):
         try:
@@ -293,26 +375,41 @@ async def main(page: ft.Page):
         # Note: We can't block easily here without blocking the whole UI setup, 
         # so we let the UI load behind it but disabled (modal=True does the trick visually)
 
-    # --- Konami Code Debug Trigger ---
-    konami_code = ["Arrow Up", "Arrow Up", "Arrow Down", "Arrow Down", "Arrow Left", "Arrow Right", "Arrow Left", "Arrow Right", "B", "A"]
-    key_buffer = []
+    # --- Konami Code Secret ---
+    konami_sequence = ["Arrow Up", "Arrow Up", "Arrow Down", "Arrow Down", "Arrow Left", "Arrow Right", "Arrow Left", "Arrow Right", "A", "B"]
+    konami_state = []
 
-    def on_keyboard(e: ft.KeyboardEvent):
-        nonlocal key_buffer
+    async def on_keyboard(e: ft.KeyboardEvent):
+        nonlocal konami_state
+        # Gate by specific version string
+        if APP_VERSION != "Dev Build":
+            return
+
+        # Normalize key (handle cases with/without spaces and case sensitivity for A,B)
         key = e.key
+        if key.lower() in ["a", "b"]:
+            key = key.upper()
         
-        # Add to buffer
-        key_buffer.append(key)
+        # Append and track
+        konami_state.append(key)
+        current_len = len(konami_state)
         
-        # Keep buffer size manageable
-        if len(key_buffer) > len(konami_code):
-            key_buffer.pop(0)
-            
-        # Check match
-        if key_buffer == konami_code:
-            print("👾 Konami Code Activated! Opening FFmpeg Installer...")
-            show_ffmpeg_modal()
-            key_buffer = [] # Reset
+        # DEBUG: Print to terminal so user can see what's happening
+        print(f"Secret Input: {konami_state} (Captured: '{key}')")
+        
+        # Reset if sequence breaks
+        if konami_state != konami_sequence[:current_len]:
+            if key == konami_sequence[0]:
+                konami_state = [key]
+            else:
+                konami_state = []
+            return
+
+        # Success!
+        if len(konami_state) == len(konami_sequence):
+            konami_state = []
+            print("✨ KONAMI CODE TRIGGERED ✨")
+            show_error("that guy forced the popup as a message", title="Secret Override")
 
     page.on_keyboard_event = on_keyboard
 
@@ -323,7 +420,7 @@ async def main(page: ft.Page):
     target_size_input = ft.Ref[ft.TextField]()
     codec_dropdown = ft.Ref[ft.Dropdown]()
     container_dropdown = ft.Ref[ft.Dropdown]()
-    gpu_switch = ft.Ref[ft.Switch]()
+    # gpu_switch removed - now global in user_settings
     preview_switch = ft.Ref[ft.Switch]()
     
     preview_container = ft.Ref[ft.Container]()
@@ -393,6 +490,9 @@ async def main(page: ft.Page):
     pct_text = ft.Ref[ft.Text]()
     files_processed_text = ft.Ref[ft.Text]()
     error_log_text = ft.Ref[ft.Text]()
+    error_title_text = ft.Ref[ft.Text]()
+    error_desc_text = ft.Ref[ft.Text]()
+    error_tech_container = ft.Ref[ft.Container]()
     progress_fill = ft.Ref[ft.Container]()
     progress_container = ft.Ref[ft.Container]()
     
@@ -427,12 +527,58 @@ async def main(page: ft.Page):
     obscure_revealed = False
     all_codecs_revealed = False
     
+    # Global log buffer for error reporting (last 50 lines per tab)
+    tab_logs = {"compressor": [], "converter": [], "merger": [], "trimmer": [], "general": []}
+    
     last_set_by_slider = 0.0
     is_updating_ui = False
+
+    async def log_to_view(list_ref, message, replace_last=False):
+        # Clean message
+        msg = str(message).strip()
+        if not msg: return
+        
+        # Always record in buffer for error recovery
+        nonlocal current_tab
+        tab = "general"
+        if list_ref == compressor_log_list: tab = "compressor"
+        elif list_ref == converter_log_list: tab = "converter"
+        elif list_ref == merger_log_list: tab = "merger"
+        elif list_ref == trimmer_log_list: tab = "trimmer"
+        
+        if replace_last and tab_logs[tab]:
+            tab_logs[tab][-1] = msg
+        else:
+            tab_logs[tab].append(msg)
+            if len(tab_logs[tab]) > 50:
+                tab_logs[tab].pop(0)
+
+        # Update visual list ONLY if user has show_logs enabled
+        if not user_settings.get("show_logs", False) or not list_ref.current:
+            return
+        
+        while len(list_ref.current.controls) > 200:
+            list_ref.current.controls.pop(0)
+
+        if replace_last and len(list_ref.current.controls) > 0:
+            list_ref.current.controls[-1].value = msg
+        else:
+            list_ref.current.controls.append(
+                ft.Text(msg, size=11, font_family="monospace", color=ft.Colors.ON_SURFACE_VARIANT)
+            )
+                
+        list_ref.current.update()
 
     def log(message, replace_last=False):
         # We'll use this for status updates or fallback logging
         print(message)
+        nonlocal current_tab
+        target_list = compressor_log_list
+        if current_tab == "converter": target_list = converter_log_list
+        elif current_tab == "merger": target_list = merger_log_list
+        elif current_tab == "trimmer": target_list = trimmer_log_list
+        
+        page.run_task(log_to_view, target_list, message, replace_last)
 
     def on_progress(data):
         if res_text.current: res_text.current.value = f"{data['res']}p"
@@ -628,6 +774,12 @@ async def main(page: ft.Page):
     conv_time_text = ft.Ref[ft.Text]()
     conv_fps_text = ft.Ref[ft.Text]()
     conv_pct_text = ft.Ref[ft.Text]()
+    
+    # Log Output Refs
+    compressor_log_list = ft.Ref[ft.ListView]()
+    converter_log_list = ft.Ref[ft.ListView]()
+    merger_log_list = ft.Ref[ft.ListView]()
+    trimmer_log_list = ft.Ref[ft.ListView]()
     
     conv_preview_img = ft.Ref[ft.Image]()
     conv_status_overlay = ft.Ref[ft.Container]()
@@ -827,10 +979,9 @@ async def main(page: ft.Page):
         on_text_change(e)
 
     def on_codec_change(e):
-        if not gpu_switch.current: return
-        gpu_switch.current.disabled = (e.control.value == "h266")
-        if gpu_switch.current.disabled: gpu_switch.current.value = False
-        gpu_switch.current.update()
+        # We no longer disable a local toggle here. 
+        # Codecs like H.266 simply won't find a GPU encoder in logic.get_encoder
+        pass
 
     def on_container_change(e):
         nonlocal target_output_path
@@ -979,46 +1130,166 @@ async def main(page: ft.Page):
     )
     page.overlay.append(advanced_dialog)
 
-    # --- Error Dialog ---
+    def get_system_report():
+        try:
+            ffmpeg_v = "Unknown"
+            try:
+                res = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
+                ffmpeg_v = res.stdout.split('\n')[0]
+            except: pass
+            
+            report = [
+                f"App Version: {APP_VERSION}",
+                f"OS: {platform.system()} {platform.release()} ({platform.machine()})",
+                f"Python: {sys.version.split()[0]}",
+                f"Flet: {ft.__version__ if hasattr(ft, '__version__') else 'Unknown'}",
+                f"FFmpeg: {ffmpeg_v}"
+            ]
+            return "\n".join(report)
+        except:
+            return "System info unavailable"
+
+    async def report_on_github(e):
+        title = error_title_text.current.value if error_title_text.current else "Error Report"
+        desc = error_desc_text.current.value if error_desc_text.current else "No description"
+        tech = error_log_text.current.value if error_log_text.current else "No logs"
+        sys_info = get_system_report()
+        
+        body = f"### Error Description\n{desc}\n\n### Technical Logs\n```\n{tech}\n```\n\n### System Info\n```\n{sys_info}\n```"
+        
+        # GitHub new issue URL
+        repo_url = "https://github.com/hapatapa/videoutils/issues/new"
+        params = {
+            "title": f"[{APP_VERSION}] {title}",
+            "body": body
+        }
+        # Keep URL length reasonable (approx 2000 chars is safe for most browsers)
+        encoded_params = urllib.parse.urlencode(params)
+        if len(encoded_params) > 1800:
+            tech_truncated = tech[:500] + "\n... (truncated for URL, please paste full logs) ..."
+            params["body"] = f"### Error Description\n{desc}\n\n### Technical Logs (Truncated)\n```\n{tech_truncated}\n```\n\n### System Info\n```\n{sys_info}\n```"
+            encoded_params = urllib.parse.urlencode(params)
+            
+        await page.launch_url(f"{repo_url}?{encoded_params}")
+
+    async def copy_error_to_clipboard(e):
+        txt = error_log_text.current.value if error_log_text.current else ""
+        if not txt: return
+        
+        # Fallback chain for clipboard access
+        
+        # 1. Try Flet standard async (on both page and e.page)
+        for p_obj in [e.page, page]:
+            try:
+                if hasattr(p_obj, "set_clipboard"):
+                    await p_obj.set_clipboard(txt)
+                    show_success("Copied to clipboard!")
+                    return
+            except: pass
+
+        # 2. Try Flet standard sync
+        for p_obj in [e.page, page]:
+            try:
+                if hasattr(p_obj, "set_clipboard"):
+                    p_obj.set_clipboard(txt)
+                    show_success("Copied to clipboard!")
+                    return
+            except: pass
+
+        # 3. Linux-specific fallback (subprocess)
+        if platform.system() == "Linux":
+            # Selection of common linux clipboard tools
+            tools = [
+                (['xclip', '-selection', 'clipboard'], "xclip"),
+                (['xsel', '--clipboard', '--input'], "xsel"),
+                (['wl-copy'], "wl-copy")
+            ]
+            for cmd_args, name in tools:
+                try:
+                    # Check if tool exists
+                    if shutil.which(cmd_args[0]):
+                        p = subprocess.Popen(cmd_args, stdin=subprocess.PIPE, close_fds=True)
+                        p.communicate(input=txt.encode('utf-8'))
+                        if p.returncode == 0:
+                            show_success(f"Copied to clipboard (via {name})")
+                            return
+                except: pass
+
+        # 4. Final failure
+        print(f"Clipboard access failed for all methods.")
+        show_error("Could not access system clipboard automatically. Please select the text in the box below and copy it manually (Ctrl+C).", title="Clipboard Error")
+
+    # --- Application Error Dialog ---
     error_dialog = ft.AlertDialog(
         title=ft.Row([
             ft.Icon(ft.Icons.ERROR_OUTLINE, color=ft.Colors.ERROR, size=32),
-            ft.Text("Compression Error", weight=ft.FontWeight.W_900, color=ft.Colors.ERROR)
+            ft.Text("Application Error", ref=error_title_text, weight=ft.FontWeight.W_900, color=ft.Colors.ERROR)
         ], spacing=10),
         content=ft.Container(
             content=ft.Column([
-                ft.Text("An error occurred during compression:", size=14),
-                ft.Divider(),
+                ft.Text("Details:", size=14, weight=ft.FontWeight.BOLD),
+                ft.Text("", ref=error_desc_text, size=14),
+                ft.Divider(height=20),
                 ft.Container(
-                    content=ft.Text(
-                        ref=error_log_text,
-                        value="",
-                        size=12,
-                        selectable=True,
-                        color=ft.Colors.ON_SURFACE_VARIANT
-                    ),
+                    ref=error_tech_container,
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Icon(ft.Icons.TERMINAL_ROUNDED, size=16, color=ft.Colors.ON_SURFACE_VARIANT),
+                            ft.Text("Technical Details / FFmpeg Logs", size=12, weight=ft.FontWeight.W_600, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ], spacing=5),
+                        ft.Container(
+                            content=ft.Text(
+                                ref=error_log_text,
+                                value="",
+                                size=11,
+                                font_family="monospace",
+                                selectable=True,
+                                color=ft.Colors.ON_SURFACE_VARIANT
+                            ),
+                            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.BLACK),
+                            padding=10,
+                            border_radius=8,
+                            expand=True,
+                        )
+                    ], spacing=10, scroll=ft.ScrollMode.AUTO),
                     bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
                     padding=15,
-                    border_radius=10,
+                    border_radius=12,
                     height=300,
                     width=500
                 )
-            ], tight=True, spacing=10, scroll=ft.ScrollMode.AUTO),
+            ], tight=True, spacing=5),
             width=550,
             padding=10
         ),
         actions=[
-            ft.TextButton("Close", on_click=lambda _: (setattr(error_dialog, "open", False), page.update()))
+            ft.TextButton("Copy Details", icon=ft.Icons.COPY_ROUNDED, on_click=copy_error_to_clipboard),
+            ft.TextButton("Report on GitHub", icon=ft.Icons.BUG_REPORT_ROUNDED, on_click=report_on_github),
+            ft.FilledButton("Close", on_click=lambda _: (setattr(error_dialog, "open", False), page.update()), bgcolor=ft.Colors.ERROR_CONTAINER, color=ft.Colors.ON_ERROR_CONTAINER)
         ],
         actions_alignment=ft.MainAxisAlignment.END,
     )
     page.overlay.append(error_dialog)
 
-    def show_error(error_message, detailed_log=""):
-        """Display error in modal dialog"""
+    def show_error(error_message, detailed_log="", title="Application Error"):
+        """Display error in modal dialog with tab-aware log pickup"""
+        nonlocal current_tab
+        
+        # Try to pickup recent logs if detailed_log is empty
+        if not detailed_log:
+            tab = current_tab if current_tab in tab_logs else "general"
+            if tab_logs[tab]:
+                detailed_log = "--- RECENT LOGS ---\n" + "\n".join(tab_logs[tab][-20:])
+        
+        if error_title_text.current:
+            error_title_text.current.value = title
+        
+        if error_desc_text.current:
+            error_desc_text.current.value = error_message
+            
         if error_log_text.current:
-            full_message = f"{error_message}\n\n{detailed_log}" if detailed_log else error_message
-            error_log_text.current.value = full_message
+            error_log_text.current.value = detailed_log
+            
         error_dialog.open = True
         page.update()
 
@@ -1051,7 +1322,7 @@ async def main(page: ft.Page):
         placeholder_img_control.current.opacity = 1
         
         codec = codec_dropdown.current.value
-        use_gpu = gpu_switch.current.value
+        use_gpu = user_settings.get("use_gpu", True)
         show_preview = preview_switch.current.value
         
         # Advanced Params
@@ -1163,6 +1434,7 @@ async def main(page: ft.Page):
             else:
                 msg = "❌ FAILED"
                 log(f"\n❌ All compressions failed.")
+                show_error("One or more compression tasks failed. Check the logs below for specific FFmpeg errors.", title="Compression Error")
             
             # Overlay effect
             status_text.current.value = msg
@@ -1436,11 +1708,7 @@ async def main(page: ft.Page):
                     ),
                 ], spacing=10),
                 
-                ft.Row([
-                    ft.Icon(ft.Icons.SPEED, size=18, color=ft.Colors.ON_SURFACE_VARIANT),
-                    ft.Text("GPU", color=ft.Colors.ON_SURFACE_VARIANT, size=13),
-                    ft.Switch(ref=gpu_switch, value=True, active_color=ft.Colors.PRIMARY, scale=0.8)
-                ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                # GPU toggle removed - now in settings
                 
                 ft.Row([
                     ft.Icon(ft.Icons.REMOVE_RED_EYE_OUTLINED, size=18, color=ft.Colors.ON_SURFACE_VARIANT),
@@ -1506,6 +1774,22 @@ async def main(page: ft.Page):
                     height=6,
                     animate=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
                 )
+            ),
+            # Scrollable Log Output
+            ft.Container(
+                content=ft.ListView(
+                    ref=compressor_log_list,
+                    expand=True,
+                    spacing=2,
+                    padding=5,
+                    auto_scroll=True,
+                ),
+                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.BLACK),
+                border_radius=10,
+                border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+                height=150,
+                visible=user_settings.get("show_logs", False),
+                margin=ft.Margin.only(top=10)
             )
         ], spacing=15, alignment=ft.MainAxisAlignment.CENTER) 
     )
@@ -1844,6 +2128,7 @@ async def main(page: ft.Page):
                      line = process.stderr.readline()
                      if not line and process.poll() is not None: break
                      if line:
+                         page.run_task(log_to_view, converter_log_list, line)
                          lines.append(line)
                          time_match = re.search(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})", line)
                          if time_match and total_duration > 0:
@@ -1882,8 +2167,11 @@ async def main(page: ft.Page):
                          conv_status_text.current.value = "Error!"
                          conv_status_overlay.current.opacity = 1
                          conv_status_overlay.current.update()
+                     show_error("Conversion failed. This is often due to incompatible codecs or invalid settings.", title="Conversion Error")
              except Exception as e:
-                 log(f"❌ Exception: {e}")
+                  import traceback
+                  log(f"❌ Exception: {e}")
+                  show_error(f"A Python exception occurred: {str(e)}", detailed_log=traceback.format_exc(), title="Conversion Error")
              finally:
                  conv_is_running = False
                  if conv_start_btn.current: conv_start_btn.current.disabled = False; conv_start_btn.current.update()
@@ -2028,6 +2316,22 @@ async def main(page: ft.Page):
                     height=6,
                     animate=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
                 )
+            ),
+            # Scrollable Log Output
+            ft.Container(
+                content=ft.ListView(
+                    ref=converter_log_list,
+                    expand=True,
+                    spacing=2,
+                    padding=5,
+                    auto_scroll=True,
+                ),
+                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.BLACK),
+                border_radius=10,
+                border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+                height=150,
+                visible=user_settings.get("show_logs", False),
+                margin=ft.Margin.only(top=10)
             )
         ], spacing=15, alignment=ft.MainAxisAlignment.CENTER) 
     )
@@ -2494,7 +2798,7 @@ async def main(page: ft.Page):
         if not trim_file_paths or not trim_target_path:
             return
         if len(trim_segments) == 0:
-            show_error("No segments", "Please add at least one segment to remove.")
+            show_error("No segments", "Please add at least one segment to remove.", title="Trimmer Error")
             return
         
         trim_is_running = True
@@ -2530,7 +2834,7 @@ async def main(page: ft.Page):
                 # Get video duration
                 duration = trim_video_duration if trim_video_duration else get_video_duration(input_path)
                 if not duration:
-                    show_error("Error", "Could not determine video duration")
+                    show_error("Error", "Could not determine video duration", title="Trimmer Error")
                     return
                 
                 # Sort segments by start time numerically
@@ -2559,7 +2863,7 @@ async def main(page: ft.Page):
                     keep_segments.append({"start": format_time(current_time_sec), "end": format_time(duration)})
                 
                 if len(keep_segments) == 0:
-                    show_error("Error", "All segments would be removed. Nothing to output.")
+                    show_error("Error", "All segments would be removed. Nothing to output.", title="Trimmer Error")
                     return
                 
                 log(f"  Keeping {len(keep_segments)} segment(s), removing {len(sorted_segments)} segment(s)")
@@ -2627,7 +2931,7 @@ async def main(page: ft.Page):
                         if user_settings.get("auto_open_folder"):
                             open_folder(output_path)
                     else:
-                        show_error("Concat failed", result.stderr)
+                        show_error("Concat failed", result.stderr, title="Trimmer Error")
                         log(f"❌ Failed: {result.stderr}")
                         
             except Exception as ex:
@@ -2890,13 +3194,32 @@ async def main(page: ft.Page):
                         animate_opacity=400,
                         alignment=ft.Alignment.CENTER,
                         expand=True,
-                        content=ft.Image(
-                            ref=trim_processing_gif,
-                            src=gif_filename,
-                            width=70,
-                            height=70,
-                            fit=ft.BoxFit.CONTAIN
-                        )
+                        content=ft.Column([
+                            ft.Image(
+                                ref=trim_processing_gif,
+                                src=gif_filename,
+                                width=70,
+                                height=70,
+                                fit=ft.BoxFit.CONTAIN
+                            ),
+                            # Scrollable Log Output
+                            ft.Container(
+                                content=ft.ListView(
+                                    ref=trimmer_log_list,
+                                    expand=True,
+                                    spacing=2,
+                                    padding=5,
+                                    auto_scroll=True,
+                                ),
+                                bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.BLACK),
+                                border_radius=10,
+                                border=ft.Border.all(1, ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE)),
+                                height=120,
+                                width=300,
+                                visible=user_settings.get("show_logs", False),
+                                margin=ft.Margin.only(top=20)
+                            )
+                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0, alignment=ft.MainAxisAlignment.CENTER)
                     )
                 ], expand=True, alignment=ft.Alignment.CENTER),
                 alignment=ft.Alignment.CENTER, 
@@ -3083,7 +3406,7 @@ async def main(page: ft.Page):
         
         # Show progress wrapper
         if merger_progress_wrapper.current:
-            merger_progress_wrapper.current.height = 75
+            merger_progress_wrapper.current.height = 180 if user_settings.get("show_logs") else 75
             merger_progress_wrapper.current.opacity = 1
             merger_progress_wrapper.current.update()
         
@@ -3103,7 +3426,13 @@ async def main(page: ft.Page):
         
         def do_merge():
             try:
-                success, result = logic.merge_videos(video_paths, merger_target_path, merger_log, stop_event=merger_stop_event)
+                success, result = logic.merge_videos(
+                    video_paths, 
+                    merger_target_path, 
+                    merger_log, 
+                    stop_event=merger_stop_event,
+                    use_gpu=user_settings.get("use_gpu", True)
+                )
                 if success:
                     merger_log(f"✨ MERGE SUCCESS: {result}")
                     play_complete_ding()
@@ -3111,6 +3440,11 @@ async def main(page: ft.Page):
                         open_folder(merger_target_path)
                 else:
                     merger_log(f"❌ MERGE FAILED: {result}")
+                    show_error(f"Merge operation failed. {result}", title="Merge Error")
+            except Exception as e:
+                import traceback
+                merger_log(f"❌ Exception during merge: {e}")
+                show_error(f"A Python exception occurred during merge: {str(e)}", detailed_log=traceback.format_exc(), title="Merge Error")
             finally:
                 btn.disabled = False
                 btn.update()
@@ -3172,12 +3506,14 @@ async def main(page: ft.Page):
                                 eta_str = f"{m:02d}:{s:02d}"
                         
                         merger_status_text.current.value = eta_str
-                        merger_status_text.current.update()
+                merger_status_text.current.update()
              except: pass
-        else:
-            # For non-progress messages, show in status text only if it's a user message
-            if "frame=" not in msg:
-                print(msg)
+        
+        # Log to the scrollable view if enabled
+        page.run_task(log_to_view, merger_log_list, msg, replace_last)
+        
+        if "frame=" not in msg:
+            print(msg)
 
     def build_merger_card(idx):
         seg = merger_segments[idx]
@@ -3327,6 +3663,22 @@ async def main(page: ft.Page):
                             height=6,
                             animate=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
                         )
+                    ),
+                    # Scrollable Log Output
+                    ft.Container(
+                        content=ft.ListView(
+                            ref=merger_log_list,
+                            expand=True,
+                            spacing=2,
+                            padding=5,
+                            auto_scroll=True,
+                        ),
+                        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.BLACK),
+                        border_radius=10,
+                        border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+                        height=100,
+                        visible=user_settings.get("show_logs", False),
+                        margin=ft.Margin.only(top=5)
                     )
                 ], spacing=10),
                 ref=merger_progress_wrapper,
@@ -3495,6 +3847,27 @@ async def main(page: ft.Page):
     def toggle_setting(key, e):
         user_settings[key] = e.control.value
         save_settings(user_settings)
+        
+        # Immediate UI reflection for logs
+        if key == "show_logs":
+            for ref in [compressor_log_list, converter_log_list, merger_log_list, trimmer_log_list]:
+                if ref.current and ref.current.parent:
+                    ref.current.parent.visible = e.control.value
+                    ref.current.parent.update()
+        elif key == "follow_os_theme":
+            if setting_theme_switch.current:
+                setting_theme_switch.current.disabled = e.control.value
+                if e.control.value:
+                    is_dark = is_system_dark_mode()
+                    page.theme_mode = ft.ThemeMode.DARK if is_dark else ft.ThemeMode.LIGHT
+                    setting_theme_switch.current.value = is_dark
+                else:
+                    # Revert to manual preference when disabling OS sync
+                    is_manual_dark = (user_settings.get("theme_mode") == "dark")
+                    page.theme_mode = ft.ThemeMode.DARK if is_manual_dark else ft.ThemeMode.LIGHT
+                    setting_theme_switch.current.value = is_manual_dark
+                setting_theme_switch.current.update()
+        page.update()
 
     def set_accent_color(color_name):
         user_settings["accent_color"] = color_name
@@ -3505,6 +3878,8 @@ async def main(page: ft.Page):
     # --- Settings View ---
     setting_auto_open_switch = ft.Switch(value=user_settings.get("auto_open_folder", False), on_change=lambda e: toggle_setting("auto_open_folder", e), active_color=ft.Colors.PRIMARY)
     setting_ding_switch = ft.Switch(value=user_settings.get("play_ding", True), on_change=lambda e: toggle_setting("play_ding", e), active_color=ft.Colors.PRIMARY)
+    setting_gpu_switch = ft.Switch(value=user_settings.get("use_gpu", True), on_change=lambda e: toggle_setting("use_gpu", e), active_color=ft.Colors.PRIMARY)
+    setting_os_theme_switch = ft.Switch(value=user_settings.get("follow_os_theme", False), on_change=lambda e: toggle_setting("follow_os_theme", e), active_color=ft.Colors.PRIMARY)
 
     def color_dot(color_name, real_color):
         return ft.Container(
@@ -3530,13 +3905,23 @@ async def main(page: ft.Page):
                         content=ft.Column([
                             ft.Row([
                                 ft.Row([
+                                    ft.Icon(ft.Icons.BRIGHTNESS_AUTO_ROUNDED, size=20),
+                                    ft.Column([
+                                        ft.Text("Follow OS Theme", size=16, weight=ft.FontWeight.W_600),
+                                        ft.Text("Sync app theme with your system (GTK/KDE/Windows).", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                                    ], spacing=0),
+                                ], spacing=15),
+                                setting_os_theme_switch
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                            ft.Row([
+                                ft.Row([
                                     ft.Icon(ft.Icons.DARK_MODE_ROUNDED, size=20),
                                     ft.Column([
                                         ft.Text("Dark Mode", size=16, weight=ft.FontWeight.W_600),
-                                        ft.Text("Switch application theme.", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                                        ft.Text("Switch application theme manually.", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
                                     ], spacing=0),
                                 ], spacing=15),
-                                ft.Switch(ref=setting_theme_switch, value=(user_settings.get("theme_mode")=="dark"), on_change=toggle_theme, active_color=ft.Colors.PRIMARY)
+                                ft.Switch(ref=setting_theme_switch, value=(user_settings.get("theme_mode")=="dark"), on_change=toggle_theme, active_color=ft.Colors.PRIMARY, disabled=user_settings.get("follow_os_theme", False))
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                             ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
                             ft.Text("Accent Color", size=14, weight=ft.FontWeight.W_600),
@@ -3547,7 +3932,7 @@ async def main(page: ft.Page):
                                 color_dot("GREEN", ft.Colors.GREEN),
                                 color_dot("AMBER", ft.Colors.AMBER),
                                 color_dot("DEEP_ORANGE", ft.Colors.DEEP_ORANGE),
-                                color_dot("PINK", ft.Colors.PINK),
+                                color_dot("PINK_ACCENT", ft.Colors.PINK_ACCENT),
                             ], spacing=10),
                         ]),
                         padding=20, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST, border_radius=15,
@@ -3569,7 +3954,7 @@ async def main(page: ft.Page):
                                 ], spacing=15),
                                 setting_auto_open_switch
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                            # Notification Sound Toggle (Enabled via playsound library)
+                            # Notification Sound Toggle
                             ft.Row([
                                 ft.Row([
                                     ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE_ROUNDED, size=20),
@@ -3579,6 +3964,34 @@ async def main(page: ft.Page):
                                     ], spacing=0),
                                 ], spacing=15),
                                 setting_ding_switch
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                            
+                            # GPU Toggle
+                            ft.Row([
+                                ft.Row([
+                                    ft.Icon(ft.Icons.SPEED_ROUNDED, size=20),
+                                    ft.Column([
+                                        ft.Text("Hardware Acceleration (GPU)", size=16, weight=ft.FontWeight.W_600),
+                                        ft.Text("Use graphics card for faster processing. Will fallback to software if no GPU is detected.", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                                    ], spacing=0),
+                                ], spacing=15),
+                                setting_gpu_switch
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                            
+                            # FFmpeg Log Toggle
+                            ft.Row([
+                                ft.Row([
+                                    ft.Icon(ft.Icons.CODE_ROUNDED, size=20),
+                                    ft.Column([
+                                        ft.Text("Show Processing Logs", size=16, weight=ft.FontWeight.W_600),
+                                        ft.Text("Show live FFmpeg output during tasks.", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                                    ], spacing=0),
+                                ], spacing=15),
+                                ft.Switch(
+                                    value=user_settings.get("show_logs", False), 
+                                    on_change=lambda e: toggle_setting("show_logs", e), 
+                                    active_color=ft.Colors.PRIMARY
+                                )
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         ]),
                         padding=20, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST, border_radius=15,
@@ -3597,7 +4010,10 @@ async def main(page: ft.Page):
             content=ft.Column([
                 ft.Container(
                     content=ft.Column([
-                        ft.Image(src="Icon.svg", width=100, height=100),
+                        ft.Stack([
+                            ft.Image(src="Icon_Base.svg", width=100, height=100, color=ft.Colors.PRIMARY),
+                            ft.Image(src="Icon_Detail.svg", width=66.8, height=66.8, color=ft.Colors.SURFACE_CONTAINER_LOW),
+                        ], alignment=ft.Alignment.CENTER),
                         ft.Text("Video Utilities", size=28, weight=ft.FontWeight.W_900),
                         ft.Text(f"Version {APP_VERSION}", size=16, color=ft.Colors.ON_SURFACE_VARIANT),
                         ft.Divider(height=30, color=ft.Colors.TRANSPARENT),
@@ -3792,7 +4208,10 @@ async def main(page: ft.Page):
             content=ft.Row([
                 # Left side: Icon and Name
                 ft.Row([
-                    ft.Image(src="Icon.png", width=18, height=18),
+                    ft.Stack([
+                        ft.Image(src="Icon_Base.png", width=18, height=18, color=ft.Colors.PRIMARY),
+                        ft.Image(src="Icon_Detail.png", width=12, height=12, color=ft.Colors.SURFACE_CONTAINER_LOW),
+                    ], alignment=ft.Alignment.CENTER),
                     ft.Text("Video Utilities", size=11, weight=ft.FontWeight.W_600, color=ft.Colors.ON_SURFACE_VARIANT),
                 ], spacing=10),
                 

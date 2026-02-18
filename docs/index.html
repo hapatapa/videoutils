@@ -166,6 +166,54 @@
             padding: 0 24px;
         }
 
+        /* Reveal Animation */
+        .reveal {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Plans Content Styling */
+        #plans-content {
+            color: var(--md-sys-color-on-surface-variant);
+        }
+
+        #plans-content h2 {
+            display: none;
+        }
+
+        #plans-content h3 {
+            color: var(--md-sys-color-primary);
+            margin: 24px 0 12px;
+            font-size: 18px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #plans-content ul {
+            list-style: none;
+            margin-bottom: 32px;
+        }
+
+        #plans-content li {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        #plans-content li::before {
+            content: '';
+            font-family: 'Material Symbols Rounded';
+            color: var(--md-sys-color-primary);
+            font-size: 20px;
+        }
+
         /* Header / Top App Bar */
         header {
             padding: 16px 0;
@@ -360,6 +408,10 @@
             /* Hover state */
         }
 
+        .grid-span-all {
+            grid-column: 1 / -1;
+        }
+
         .card-icon-container {
             width: 56px;
             height: 56px;
@@ -546,6 +598,21 @@
                 /* Force disable tilt */
             }
         }
+
+        /* CARD STYLES */
+        .card {
+            transition: all 0.2s;
+            border: 1px solid transparent;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .card:hover {
+            background-color: var(--md-sys-color-surface-container);
+            border-color: var(--md-sys-color-outline-variant);
+            transform: translateY(-4px);
+        }
     </style>
 </head>
 
@@ -570,14 +637,14 @@
     <main>
 
         <!-- Hero -->
-        <section class="hero">
+        <section class="hero reveal">
             <div class="container">
                 <h1 class="display-large" style="margin-top: 24px;">
                     A Video Processing app<br>
                     <span style="color: var(--md-sys-color-primary);">made with Flet and FFmpeg</span>
                 </h1>
                 <p class="headline-medium" style="font-weight: 300; opacity: 0.8;">
-                    Compress, convert, trim, and merge your videos. That's basically it.
+                    Compress, convert, trim, and merge your videos. And more.
                 </p>
                 <div style="display: flex; gap: 16px; justify-content: center; margin-top: 32px;">
                     <a href="#download" class="btn btn-filled label-large" style="padding: 0 40px;">
@@ -593,7 +660,7 @@
         </section>
 
         <!-- Features Grid -->
-        <section id="features" class="features-section">
+        <section id="features" class="features-section reveal">
             <div class="container">
                 <h2 class="headline-medium" style="margin-bottom: 40px;">Features</h2>
                 <div class="features-grid">
@@ -607,7 +674,6 @@
                             <p class="body-large"
                                 style="color: var(--md-sys-color-on-surface-variant); margin-top: 8px;">
                                 Make your videos smaller so you can actually send them on Discord or wherever else.
-                                You pick a target size and it just works.
                             </p>
                         </div>
                     </div>
@@ -621,8 +687,7 @@
                             <h3 class="headline-medium" style="font-size: 24px;">Convert Videos</h3>
                             <p class="body-large"
                                 style="color: var(--md-sys-color-on-surface-variant); margin-top: 8px;">
-                                Convert videos to other formats and even to audio. MP4, MKV, MP3, WAV, GIF,
-                                animated WebP — it's all there.
+                                Convert videos to other formats and even extract high-quality audio.
                             </p>
                         </div>
                     </div>
@@ -636,8 +701,7 @@
                             <h3 class="headline-medium" style="font-size: 24px;">Trim Videos</h3>
                             <p class="body-large"
                                 style="color: var(--md-sys-color-on-surface-variant); margin-top: 8px;">
-                                Trim parts of videos without re-encoding. It's instant because it doesn't
-                                actually process the whole video, just cuts where you tell it to.
+                                Trim parts of videos without re-encoding. Lossless and instantaneous.
                             </p>
                         </div>
                     </div>
@@ -651,9 +715,7 @@
                             <h3 class="headline-medium" style="font-size: 24px;">Merge Videos</h3>
                             <p class="body-large"
                                 style="color: var(--md-sys-color-on-surface-variant); margin-top: 8px;">
-                                Combine multiple videos into one file. Add as many clips as you want,
-                                reorder them, and merge them together. No need to use a video editor for a simple task
-                                like this.
+                                Combine multiple videos into one file seamlessly.
                             </p>
                         </div>
                     </div>
@@ -664,11 +726,41 @@
                             <span class="material-symbols-rounded">extension</span>
                         </div>
                         <div>
-                            <h3 class="headline-medium" style="font-size: 24px;">FFmpeg? Don't worry about it</h3>
+                            <h3 class="headline-medium" style="font-size: 24px;">Universal FFmpeg</h3>
                             <p class="body-large"
                                 style="color: var(--md-sys-color-on-surface-variant); margin-top: 8px;">
-                                Simply run the executable. If FFmpeg is not found, the app will help you
-                                with installation. You don't need to set up anything yourself.
+                                The app handles the backend. No setup required.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Feature 6 - Settings -->
+                    <div class="card">
+                        <div class="card-icon-container">
+                            <span class="material-symbols-rounded">settings</span>
+                        </div>
+                        <div>
+                            <h3 class="headline-medium" style="font-size: 24px;">App Settings</h3>
+                            <p class="body-large"
+                                style="color: var(--md-sys-color-on-surface-variant); margin-top: 8px;">
+                                Customize your experience. Change themes, accent colors, and toggle hardware
+                                acceleration to suit your needs.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- More to come -->
+                    <div class="card grid-span-all"
+                        style="background-color: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); padding: 48px; flex-direction: row; align-items: center; gap: 32px;">
+                        <div class="card-icon-container"
+                            style="background-color: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); width: 80px; height: 80px;">
+                            <span class="material-symbols-rounded" style="font-size: 40px;">add_circle</span>
+                        </div>
+                        <div>
+                            <h3 class="display-small" style="color: inherit;">And much more...</h3>
+                            <p class="body-large" style="opacity: 0.9; margin-top: 12px; max-width: 800px;">
+                                There are already more features and I even like to add more when I feel like it. Feel
+                                free to check the Future Plans below in this page.
                             </p>
                         </div>
                     </div>
@@ -677,7 +769,7 @@
         </section>
 
         <!-- About Section -->
-        <section id="about" class="container">
+        <section id="about" class="container reveal">
             <div class="showcase">
                 <div class="showcase-content">
                     <h2 class="display-medium"
@@ -704,7 +796,7 @@
         </section>
 
         <!-- Vibe Check -->
-        <section class="container">
+        <section class="container reveal">
             <div class="showcase">
                 <div class="showcase-content">
                     <h2 class="display-medium" style="margin-bottom: 24px;">Is this vibe coded?</h2>
@@ -722,7 +814,7 @@
         </section>
 
         <!-- FAQ Section -->
-        <section class="features-section">
+        <section class="features-section reveal">
             <div class="container">
                 <h2 class="headline-medium" style="margin-bottom: 40px;">FAQ</h2>
                 <div class="features-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
@@ -769,8 +861,20 @@
             </div>
         </section>
 
+        <!-- Dynamic Roadmap -->
+        <section id="plans" class="features-section reveal">
+            <div class="container">
+                <div class="card" style="background-color: var(--md-sys-color-surface-container); padding: 48px;">
+                    <h2 class="headline-medium" style="margin-bottom: 32px;">Future Plans & Roadmap</h2>
+                    <div id="plans-content">
+                        <p>Fetching roadmap from GitHub...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Download Section -->
-        <section id="download" class="features-section"
+        <section id="download" class="features-section reveal"
             style="background-color: var(--md-sys-color-surface-container-low); margin-top: 40px; padding: 100px 0;">
             <div class="container" style="text-align: center;">
                 <h2 class="display-medium" style="margin-bottom: 16px;">Download Video Utilities</h2>
@@ -850,7 +954,21 @@
         </div>
     </footer>
 
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
+
+        // Reveal on scroll
+        function reveal() {
+            var reveals = document.querySelectorAll(".reveal");
+            for (var i = 0; i < reveals.length; i++) {
+                var windowHeight = window.innerHeight;
+                var elementTop = reveals[i].getBoundingClientRect().top;
+                if (elementTop < windowHeight - 100) reveals[i].classList.add("active");
+            }
+        }
+        window.addEventListener("scroll", reveal);
+        reveal();
+
         const heroImage = document.querySelector('.hero-image');
         const container = document.querySelector('.hero-graphics-container');
 
@@ -885,6 +1003,17 @@
             .catch(err => {
                 console.error('Failed to fetch latest version:', err);
                 document.getElementById('latest-version').textContent = 'Latest';
+            });
+
+        // Fetch Plans from GitHub
+        fetch('https://raw.githubusercontent.com/hapatapa/videoutils/main/plans.md')
+            .then(res => res.text())
+            .then(md => {
+                document.getElementById('plans-content').innerHTML = marked.parse(md);
+            })
+            .catch(err => {
+                console.error('Failed to fetch plans:', err);
+                document.getElementById('plans-content').innerHTML = "<p>Could not load plans from GitHub.</p>";
             });
     </script>
 </body>
