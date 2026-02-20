@@ -4249,7 +4249,7 @@ async def main(page: ft.Page):
                             ref=silence_dur_slider,
                             min=0.1, max=5.0, value=0.5,
                             divisions=49,
-                            label="{value} s",
+                            label="{value:.1f} s",
                             active_color=ft.Colors.PRIMARY,
                             inactive_color=ft.Colors.SURFACE_CONTAINER_HIGHEST,
                             expand=True
