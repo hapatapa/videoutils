@@ -11,7 +11,7 @@ import signal
 import flet as ft
 from flet_video import Video, VideoMedia, PlaylistMode
 import shutil
-import compressor_logic as logic
+import processing_logic as logic
 import json
 from playsound import playsound
 import platform
@@ -35,7 +35,9 @@ DEFAULT_SETTINGS = {
     "play_ding": True,
     "show_logs": False,
     "use_gpu": True,
-    "follow_os_theme": False
+    "follow_os_theme": False,
+    "comic_sans_unlocked": False,
+    "comic_sans_active": False
 }
 
 def is_system_dark_mode():
@@ -186,14 +188,25 @@ async def main(page: ft.Page):
     threading.Thread(target=theme_poll_loop, daemon=True).start()
     
     page.fonts = {
-        "Roboto Flex": "https://raw.githubusercontent.com/google/fonts/main/ofl/robotoflex/RobotoFlex%5BGRAD%2COops%2CYOPQ%2CYTLC%2CYTAS%2CYTDE%2CYTFI%2CYTUC%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf"
+        "Roboto Flex": "https://raw.githubusercontent.com/google/fonts/main/ofl/robotoflex/RobotoFlex%5BGRAD%2COops%2CYOPQ%2CYTLC%2CYTAS%2CYTDE%2CYTFI%2CYTUC%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf",
+        "Comic Neue": "https://raw.githubusercontent.com/google/fonts/main/ofl/comicneue/ComicNeue-Regular.ttf"
     }
     
-    # Set Accent Color
-    accent_name = user_settings.get("accent_color", "INDIGO_ACCENT")
+    # Set Accent Color & Font
+    accent_name = str(user_settings.get("accent_color", "INDIGO_ACCENT"))
+    default_font = "Comic Neue" if user_settings.get("comic_sans_active", False) else "Roboto Flex"
+    
+    seed = ft.Colors.INDIGO_ACCENT
+    if accent_name.startswith("#"):
+        seed = accent_name
+    elif accent_name == "FLUORESCENT_GREEN":
+        seed = "#00FF00"
+    else:
+        seed = getattr(ft.Colors, accent_name, ft.Colors.INDIGO_ACCENT)
+
     page.theme = ft.Theme(
-        font_family="Roboto Flex",
-        color_scheme_seed=getattr(ft.Colors, accent_name, ft.Colors.INDIGO_ACCENT)
+        font_family=default_font,
+        color_scheme_seed=seed
     )
     
     # Audio for Notification
@@ -1048,15 +1061,50 @@ async def main(page: ft.Page):
             page.show_dialog(ft.SnackBar(ft.Text("Oh god, why would you do that again???? now its even worse we're gonna die!!! TOO MUCH ENCODERS AHHHHHHHHHHHHHHHHHH")))
             page.update()
 
+        # Stage 3: THE COMIC RELIEF
+        elif all_codecs_revealed and not user_settings.get("comic_sans_unlocked", False) and easter_egg_clicks >= 30:
+            user_settings["comic_sans_unlocked"] = True
+            save_settings(user_settings)
+            
+            if comic_sans_toggle_row.current:
+                comic_sans_toggle_row.current.visible = True
+                comic_sans_toggle_row.current.update()
+            
+            advanced_dialog.open = False
+            page.show_dialog(ft.SnackBar(ft.Text("Fine, YOU WANT TO CONTINUE, GUESS WHAT, I'M TIRED OF THIS, ACTIVATE THE TOGGLE IN ADVANCED SETTINGS NOW")))
+            page.update()
+
+    comic_sans_toggle_row = ft.Ref[ft.Row]()
+
+    def toggle_comic_sans(e):
+        is_active = e.control.value
+        user_settings["comic_sans_active"] = is_active
+        save_settings(user_settings)
+        
+        # Immediate reflection
+        page.theme.font_family = "Comic Neue" if is_active else "Roboto Flex"
+        page.update()
+
     # --- Advanced Settings Dialog ---
     advanced_dialog = ft.AlertDialog(
-        title=ft.GestureDetector(
-            content=ft.Container(
-                content=ft.Text("Advanced Settings", weight=ft.FontWeight.W_900),
-                padding=10
+        title=ft.Row([
+            ft.GestureDetector(
+                content=ft.Container(
+                    content=ft.Text("Advanced Settings", weight=ft.FontWeight.W_900),
+                    padding=10
+                ),
+                on_tap=on_advanced_title_click
             ),
-            on_tap=on_advanced_title_click
-        ),
+            ft.Row([
+                ft.Text("Comic", size=10, italic=True, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Switch(
+                    value=user_settings.get("comic_sans_active", False),
+                    on_change=toggle_comic_sans,
+                    scale=0.7,
+                    active_color=ft.Colors.PRIMARY
+                )
+            ], ref=comic_sans_toggle_row, visible=user_settings.get("comic_sans_unlocked", False), spacing=5)
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         content=ft.Container(
             content=ft.Column([
                 ft.Text("Fine-tune your encoding parameters for maximum quality:", color=ft.Colors.ON_SURFACE_VARIANT, size=13),
@@ -1911,7 +1959,6 @@ async def main(page: ft.Page):
     tab_converter_text = ft.Ref[ft.Text]()
     tab_trimmer_text = ft.Ref[ft.Text]()
     tab_merger_text = ft.Ref[ft.Text]()
-    tab_more_text = ft.Ref[ft.Text]()
     tab_more_text = ft.Ref[ft.Text]()
     tab_compressor_icon = ft.Ref[ft.Icon]()
     tab_converter_icon = ft.Ref[ft.Icon]()
@@ -3780,10 +3827,564 @@ async def main(page: ft.Page):
     animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
     )
 
+    # --- Audio Utilities View ---
+    
+    audio_input_path = None
+    audio_source_path = None
+    audio_output_path = None
+    audio_input_duration = 0.0
+    audio_source_duration = 0.0
+    audio_mode = "replacement" # replacement, normalization, silence_cut
+    
+    audio_input_field = ft.Ref[ft.TextField]()
+    audio_source_field = ft.Ref[ft.TextField]() 
+    audio_output_field = ft.Ref[ft.TextField]()
+    audio_mode_dropdown = ft.Ref[ft.Dropdown]()
+    
+    norm_target_slider = ft.Ref[ft.Slider]()
+    silence_db_slider = ft.Ref[ft.Slider]()
+    silence_dur_slider = ft.Ref[ft.Slider]()
+    
+    audio_source_container = ft.Ref[ft.Container]()
+    norm_params_container = ft.Ref[ft.Container]()
+    silence_params_container = ft.Ref[ft.Container]()
+    
+    audio_run_btn = ft.Ref[ft.FilledButton]()
+    audio_status_text = ft.Ref[ft.Text]()
+    audio_loop_switch = ft.Ref[ft.Switch]()
+    audio_loop_container = ft.Ref[ft.Container]()
+    
+    def on_audio_mode_change(e):
+        nonlocal audio_mode
+        # Use value directly if it's a string, or control.value if it's an event
+        val = e.control.value if hasattr(e, "control") else str(e)
+        audio_mode = val
+        
+        # Update visibility
+        if audio_source_container.current:
+            audio_source_container.current.visible = (audio_mode == "replacement")
+            audio_source_container.current.update()
+
+        if audio_loop_container.current:
+            update_audio_loop_visibility()
+            
+        if norm_params_container.current:
+            norm_params_container.current.visible = (audio_mode == "normalization")
+            norm_params_container.current.update()
+            
+        if silence_params_container.current:
+            silence_params_container.current.visible = (audio_mode == "silence_cut")
+            silence_params_container.current.update()
+            
+        check_audio_can_start()
+        page.update()
+
+    def update_audio_loop_visibility():
+        if not audio_loop_container.current: return
+        # Toggle only if in replacement mode and audio is definitely shorter than video
+        should_show = (
+            audio_mode == "replacement" and 
+            audio_input_path is not None and 
+            audio_source_path is not None and 
+            audio_source_duration < audio_input_duration - 0.1
+        )
+        audio_loop_container.current.visible = should_show
+        audio_loop_container.current.update()
+
+    def check_audio_can_start():
+        if not audio_run_btn.current: return
+        
+        can_start = False
+        if audio_input_path and audio_output_path:
+            if audio_mode == "replacement":
+                if audio_source_path: can_start = True
+            else:
+                can_start = True
+                
+        audio_run_btn.current.disabled = not can_start
+        audio_run_btn.current.update()
+
+    def audio_file_picker_result(file):
+        nonlocal audio_input_path, audio_output_path
+        if file:
+            audio_input_path = file.path
+            if audio_input_field.current:
+                audio_input_field.current.value = os.path.basename(audio_input_path)
+                audio_input_field.current.update()
+            
+            # Auto set output
+            base, ext = os.path.splitext(audio_input_path)
+            audio_output_path = f"{base}_processed{ext}"
+            if audio_output_field.current: 
+                audio_output_field.current.value = os.path.basename(audio_output_path)
+                audio_output_field.current.update()
+
+            audio_input_duration = logic.get_video_duration(audio_input_path) or 0.0
+            update_audio_loop_visibility()
+            check_audio_can_start()
+            
+    def audio_source_picker_result(file):
+        nonlocal audio_source_path
+        if file:
+            audio_source_path = file.path
+            if audio_source_field.current:
+                audio_source_field.current.value = os.path.basename(audio_source_path)
+                audio_source_field.current.update()
+            
+            audio_source_duration = logic.get_video_duration(audio_source_path) or 0.0
+            update_audio_loop_visibility()
+            check_audio_can_start()
+    
+    def audio_output_picker_result(path):
+        nonlocal audio_output_path
+        if path:
+            audio_output_path = path
+            if audio_output_field.current:
+                audio_output_field.current.value = os.path.basename(audio_output_path)
+                audio_output_field.current.update()
+            check_audio_can_start()
+
+    audio_picker = ft.FilePicker()
+    audio_source_picker = ft.FilePicker()
+    audio_out_picker = ft.FilePicker()
+
+    async def pick_audio_input(e):
+        res = await audio_picker.pick_files()
+        if res and len(res) > 0:
+            audio_file_picker_result(res[0])
+
+    async def pick_audio_source(e):
+        res = await audio_source_picker.pick_files(allowed_extensions=["mp3", "wav", "aac", "ogg", "flac", "m4a"])
+        if res and len(res) > 0:
+            audio_source_picker_result(res[0])
+            
+    async def pick_audio_output(e):
+        res = await audio_out_picker.save_file(file_name="output.mp4")
+        if res:
+            audio_output_picker_result(res)
+    
+    def run_audio_task(e=None):
+        nonlocal audio_mode, audio_is_running
+        if not audio_input_path or not audio_output_path: return
+        if audio_is_running: return
+
+        audio_is_running = True
+        audio_stop_event.clear()
+
+        if audio_status_text.current:
+            audio_status_text.current.value = "Starting..."
+            audio_status_text.current.update()
+        
+        if audio_run_btn.current:
+            audio_run_btn.current.disabled = True
+            audio_run_btn.current.update()
+
+        # Enable stop button for silence_cut (supports cancellation)
+        if audio_stop_btn.current:
+            audio_stop_btn.current.disabled = (audio_mode != "silence_cut")
+            audio_stop_btn.current.update()
+
+        def _push_log(msg):
+            """Send a line to the audio log panel and status text."""
+            print(msg)
+            if audio_log_list.current:
+                page.run_task(
+                    log_to_view, audio_log_list,
+                    ft.Text(msg, size=12, color=ft.Colors.ON_SURFACE_VARIANT, selectable=True)
+                )
+            if audio_status_text.current and msg.strip():
+                # Show shortest meaningful last line in the status label
+                short = msg.strip()[:80]
+                audio_status_text.current.value = short
+                audio_status_text.current.update()
+
+        def task_thread():
+            nonlocal audio_is_running
+            try:
+                success = False
+                msg = ""
+
+                if audio_mode == "replacement":
+                    if not audio_source_path: return
+                    loop_audio = bool(
+                        audio_loop_switch.current and audio_loop_switch.current.value
+                    )
+                    success, msg = logic.replace_audio(
+                        audio_input_path, audio_source_path, audio_output_path,
+                        _push_log, loop_audio=loop_audio
+                    )
+
+                elif audio_mode == "normalization":
+                    target_lufs = norm_target_slider.current.value if norm_target_slider.current else -14.0
+                    success, msg = logic.normalize_audio(
+                        audio_input_path, audio_output_path, target_lufs, _push_log
+                    )
+
+                elif audio_mode == "silence_cut":
+                    db = silence_db_slider.current.value if silence_db_slider.current else -30
+                    dur = silence_dur_slider.current.value if silence_dur_slider.current else 0.5
+                    success, msg = logic.remove_silence(
+                        audio_input_path, audio_output_path, db, dur,
+                        _push_log, stop_event=audio_stop_event
+                    )
+
+                if success:
+                    play_complete_ding()
+                    if user_settings.get("auto_open_folder"):
+                        open_folder(msg)
+                    if audio_status_text.current:
+                        audio_status_text.current.value = "Done! ✅"
+                        audio_status_text.current.update()
+                    if audio_pct_text.current:
+                        audio_pct_text.current.value = "100%"
+                        audio_pct_text.current.update()
+                    if audio_progress_fill.current:
+                        audio_progress_fill.current.width = None  # reset (expand)
+                        audio_progress_fill.current.update()
+                else:
+                    if audio_status_text.current:
+                        audio_status_text.current.value = f"Failed: {msg[:60]}"
+                        audio_status_text.current.update()
+
+            except Exception as ex:
+                import traceback
+                if audio_status_text.current:
+                    audio_status_text.current.value = f"Error: {ex}"
+                    audio_status_text.current.update()
+                _push_log(traceback.format_exc())
+            finally:
+                audio_is_running = False
+                if audio_run_btn.current:
+                    audio_run_btn.current.disabled = False
+                    audio_run_btn.current.update()
+                if audio_stop_btn.current:
+                    audio_stop_btn.current.disabled = True
+                    audio_stop_btn.current.update()
+        
+        threading.Thread(target=task_thread, daemon=True).start()
+
+    # --- Audio Utilities UI Components (matching Compressor/Converter layout) ---
+    
+    audio_stop_event = threading.Event()
+    audio_is_running = False
+    audio_stop_btn = ft.Ref[ft.OutlinedButton]()
+    audio_progress_fill = ft.Ref[ft.Container]()
+    audio_pct_text = ft.Ref[ft.Text]()
+    audio_time_text = ft.Ref[ft.Text]()
+    audio_log_list = ft.Ref[ft.ListView]()
+
+    # File section (pill buttons + input/output fields)
+    audio_file_section = ft.Container(
+        content=ft.Column([
+            ft.Row([
+                ft.FilledButton(
+                    "Input File",
+                    icon=ft.Icons.VIDEO_FILE_ROUNDED,
+                    on_click=pick_audio_input,
+                    style=ft.ButtonStyle(
+                        padding=10,
+                        shape=ft.RoundedRectangleBorder(radius=30),
+                        bgcolor=ft.Colors.PRIMARY,
+                        color=ft.Colors.ON_PRIMARY
+                    )
+                ),
+                ft.Container(expand=True),
+                ft.FilledButton(
+                    "Choose Output",
+                    icon=ft.Icons.DOWNLOAD_ROUNDED,
+                    on_click=pick_audio_output,
+                    style=ft.ButtonStyle(
+                        padding=10,
+                        shape=ft.RoundedRectangleBorder(radius=30),
+                        bgcolor=ft.Colors.PRIMARY,
+                        color=ft.Colors.ON_PRIMARY
+                    )
+                )
+            ], spacing=5),
+            ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+            ft.Row([
+                ft.Container(
+                    content=ft.TextField(
+                        ref=audio_input_field,
+                        label="Input",
+                        read_only=True,
+                        border_color=ft.Colors.OUTLINE,
+                        border_radius=12,
+                        text_size=14,
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        height=40,
+                        content_padding=10
+                    ),
+                    expand=True
+                ),
+                ft.Container(
+                    content=ft.TextField(
+                        ref=audio_output_field,
+                        label="Output",
+                        read_only=True,
+                        border_color=ft.Colors.OUTLINE,
+                        border_radius=12,
+                        text_size=14,
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        height=40,
+                        content_padding=10
+                    ),
+                    expand=True
+                )
+            ], spacing=10)
+        ]),
+        padding=0,
+        margin=ft.Margin.only(bottom=5)
+    )
+
+    # Settings card (mode dropdown + mode-specific params)
+    audio_settings_card = ft.Container(
+        content=ft.Column([
+            ft.Row([
+                ft.Icon(ft.Icons.AUDIOTRACK_ROUNDED, color=ft.Colors.PRIMARY, size=20),
+                ft.Text("Audio Settings", size=16, weight=ft.FontWeight.W_900),
+            ], spacing=5),
+            ft.Divider(color=ft.Colors.OUTLINE_VARIANT, height=10),
+            ft.Row([
+                ft.Dropdown(
+                    ref=audio_mode_dropdown,
+                    label="Mode",
+                    value="replacement",
+                    options=[
+                        ft.DropdownOption("replacement", "Audio Replacement"),
+                        ft.DropdownOption("normalization", "Normalization (Loudness)"),
+                        ft.DropdownOption("silence_cut", "Silence Removal (Experimental)"),
+                    ],
+                    on_select=on_audio_mode_change,
+                    border_radius=10,
+                    text_size=13,
+                    content_padding=5,
+                    height=40,
+                    width=260,
+                    menu_height=200
+                ),
+                # Source audio picker (replacement mode)
+                ft.Container(
+                    ref=audio_source_container,
+                    content=ft.Row([
+                        ft.FilledButton(
+                            "New Audio",
+                            icon=ft.Icons.AUDIO_FILE_ROUNDED,
+                            on_click=pick_audio_source,
+                            style=ft.ButtonStyle(
+                                padding=10,
+                                shape=ft.RoundedRectangleBorder(radius=30),
+                                bgcolor=ft.Colors.SECONDARY,
+                                color=ft.Colors.ON_SECONDARY
+                            )
+                        ),
+                        ft.Container(
+                            content=ft.TextField(
+                                ref=audio_source_field,
+                                label="Audio Track",
+                                read_only=True,
+                                border_color=ft.Colors.OUTLINE,
+                                border_radius=10,
+                                text_size=13,
+                                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                                height=40,
+                                content_padding=8
+                            ),
+                            expand=True
+                        )
+                    ], spacing=8),
+                    visible=True,
+                    expand=True
+                ),
+                # Loop toggle (replacement mode only)
+                ft.Container(
+                    ref=audio_loop_container,
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.LOOP_ROUNDED, size=18, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Text("Loop audio", size=13, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Switch(
+                            ref=audio_loop_switch,
+                            value=False,
+                            active_color=ft.Colors.PRIMARY,
+                            scale=0.8,
+                            tooltip="Loop the audio track if it's shorter than the video"
+                        ),
+                    ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    visible=True,
+                ),
+                # Normalization params
+                ft.Container(
+                    ref=norm_params_container,
+                    content=ft.Row([
+                        ft.Text("Target Loudness:", size=13, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Slider(
+                            ref=norm_target_slider,
+                            min=-30, max=-5, value=-14,
+                            divisions=25,
+                            label="{value} LUFS",
+                            active_color=ft.Colors.PRIMARY,
+                            inactive_color=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                            expand=True
+                        ),
+                    ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER, expand=True),
+                    visible=False,
+                    expand=True
+                ),
+                # Silence cut params
+                ft.Container(
+                    ref=silence_params_container,
+                    content=ft.Row([
+                        ft.Text("Threshold:", size=13, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Slider(
+                            ref=silence_db_slider,
+                            min=-60, max=-10, value=-30,
+                            divisions=50,
+                            label="{value} dB",
+                            active_color=ft.Colors.PRIMARY,
+                            inactive_color=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                            expand=True
+                        ),
+                        ft.Text("Min Duration:", size=13, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Slider(
+                            ref=silence_dur_slider,
+                            min=0.1, max=5.0, value=0.5,
+                            divisions=49,
+                            label="{value} s",
+                            active_color=ft.Colors.PRIMARY,
+                            inactive_color=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                            expand=True
+                        ),
+                    ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER, expand=True),
+                    visible=False,
+                    expand=True
+                ),
+            ], alignment=ft.MainAxisAlignment.START, spacing=15, vertical_alignment=ft.CrossAxisAlignment.CENTER, wrap=False),
+        ], spacing=5),
+        padding=10,
+        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+        border_radius=15,
+        border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT)
+    )
+
+    # Progress / log panel
+    audio_log_side = ft.Container(
+        bgcolor=ft.Colors.SURFACE_CONTAINER,
+        border_radius=15,
+        border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
+        padding=15,
+        expand=True,
+        content=ft.Column([
+            ft.Text("Progress", size=48, weight=ft.FontWeight.W_900, color=ft.Colors.ON_SURFACE),
+            ft.Row([
+                ft.Text("Status : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Text(ref=audio_status_text, value="Ready", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
+                ft.VerticalDivider(width=20, color=ft.Colors.TRANSPARENT),
+                ft.Text("Percentage : ", size=14, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Text("0%", ref=audio_pct_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_SURFACE),
+            ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            ft.Container(
+                bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE),
+                height=6,
+                border_radius=3,
+                alignment=ft.Alignment.CENTER_LEFT,
+                clip_behavior=ft.ClipBehavior.HARD_EDGE,
+                content=ft.Container(
+                    ref=audio_progress_fill,
+                    width=0,
+                    bgcolor=ft.Colors.PRIMARY,
+                    height=6,
+                    animate=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO)
+                )
+            ),
+            ft.Container(
+                content=ft.ListView(
+                    ref=audio_log_list,
+                    expand=True,
+                    spacing=2,
+                    padding=5,
+                    auto_scroll=True,
+                ),
+                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.BLACK),
+                border_radius=10,
+                border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+                height=150,
+                visible=user_settings.get("show_logs", False),
+                margin=ft.Margin.only(top=10)
+            )
+        ], spacing=15, alignment=ft.MainAxisAlignment.CENTER)
+    )
+
+    audio_content_row = ft.Row([
+        ft.Container(content=audio_log_side, expand=True),
+    ], spacing=20, expand=True)
+
+    # Controls row
+    audio_controls_row = ft.Row([
+        ft.FilledButton(
+            ref=audio_run_btn,
+            content=ft.Row([
+                ft.Icon(ft.Icons.BOLT_ROUNDED),
+                ft.Text("Run Audio Task", size=16, weight=ft.FontWeight.W_900)
+            ], alignment=ft.MainAxisAlignment.CENTER, spacing=10),
+            style=ft.ButtonStyle(
+                padding=15,
+                shape=ft.RoundedRectangleBorder(radius=10),
+                bgcolor={ft.ControlState.DEFAULT: ft.Colors.PRIMARY},
+                color={ft.ControlState.DEFAULT: ft.Colors.ON_PRIMARY}
+            ),
+            on_click=run_audio_task,
+            disabled=True,
+            expand=True
+        ),
+        ft.OutlinedButton(
+            ref=audio_stop_btn,
+            content="Stop",
+            icon=ft.Icons.STOP_CIRCLE_OUTLINED,
+            style=ft.ButtonStyle(
+                padding=15,
+                color={ft.ControlState.DEFAULT: ft.Colors.RED_400},
+                shape=ft.RoundedRectangleBorder(radius=10),
+                side={ft.ControlState.DEFAULT: ft.BorderSide(1, ft.Colors.RED_400)}
+            ),
+            on_click=lambda _: audio_stop_event.set(),
+            disabled=True
+        )
+    ], spacing=15)
+
+    audio_view_col = ft.Column([
+        audio_file_section,
+        audio_settings_card,
+        ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+        audio_content_row,
+        ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+        audio_controls_row
+    ], expand=True, offset=ft.Offset(7, 0), animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO))
+
     # --- More View ---
     more_view_col = ft.Column([
         ft.Container(
             content=ft.Column([
+                ft.Text("Utilities", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
+                ft.Divider(height=10, thickness=1, color=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+                
+                ft.Row([
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Icon(ft.Icons.AUDIOTRACK_ROUNDED, size=30, color=ft.Colors.PRIMARY),
+                            ft.Text("Audio Utilities", size=14, weight=ft.FontWeight.W_600),
+                        ], alignment=ft.MainAxisAlignment.CENTER, spacing=5, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        width=150,
+                        height=100,
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        border_radius=15,
+                        alignment=ft.Alignment.CENTER,
+                        ink=True,
+                        on_click=lambda _: set_tab("audio"),
+                    ),
+                ], spacing=15, alignment=ft.MainAxisAlignment.CENTER),
+
+                ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+
                 ft.Text("App", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
                 ft.Divider(height=10, thickness=1, color=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
                 ft.Row([
@@ -3871,7 +4472,10 @@ async def main(page: ft.Page):
 
     def set_accent_color(color_name):
         user_settings["accent_color"] = color_name
-        page.theme.color_scheme_seed = getattr(ft.Colors, color_name)
+        if color_name.startswith("#") or color_name == "FLUORESCENT_GREEN":
+            page.theme.color_scheme_seed = "#00FF00" if color_name == "FLUORESCENT_GREEN" else color_name
+        else:
+            page.theme.color_scheme_seed = getattr(ft.Colors, color_name, ft.Colors.INDIGO_ACCENT)
         save_settings(user_settings)
         page.update()
 
@@ -3930,9 +4534,10 @@ async def main(page: ft.Page):
                                 color_dot("BLUE", ft.Colors.BLUE),
                                 color_dot("TEAL", ft.Colors.TEAL),
                                 color_dot("GREEN", ft.Colors.GREEN),
+                                color_dot("FLUORESCENT_GREEN", "#00FF00"),
+                                color_dot("LIME", ft.Colors.LIME),
                                 color_dot("AMBER", ft.Colors.AMBER),
-                                color_dot("DEEP_ORANGE", ft.Colors.DEEP_ORANGE),
-                                color_dot("PINK_ACCENT", ft.Colors.PINK_ACCENT),
+                                color_dot("ORANGE", ft.Colors.ORANGE),
                             ], spacing=10),
                         ]),
                         padding=20, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST, border_radius=15,
@@ -4099,14 +4704,15 @@ async def main(page: ft.Page):
         # Switch View with Animation (Full 7-slot stack)
         offsets = {
             "compressor": 0, "converter": 1, "trimmer": 2, "merger": 3, 
-            "more": 4, "settings": 5, "about": 6
+            "more": 4, "settings": 5, "about": 6, "audio": 7
         }
         target_idx = offsets.get(name, 0)
         
         # Apply offsets to all views
         views = [
             compressor_view_col, converter_view_col, trimmer_view_col, 
-            merger_view_col, more_view_col, settings_view_col, about_view_col
+            merger_view_col, more_view_col, settings_view_col, about_view_col,
+            audio_view_col
         ]
         
         for i, view in enumerate(views):
@@ -4286,7 +4892,8 @@ async def main(page: ft.Page):
                             merger_view_col,
                             more_view_col,
                             settings_view_col,
-                            about_view_col
+                            about_view_col,
+                            audio_view_col
                         ]),
                         expand=True,
                         clip_behavior=ft.ClipBehavior.HARD_EDGE
