@@ -5815,10 +5815,12 @@ async def main(page: ft.Page):
     ], expand=True, spacing=0)
 
     # 2. The Glass Layer (Wraps the UI and applies the frosted backdrop filter)
+    # Using explicit named sigmas and hard clipping for guaranteed visibility
     glass_blur_layer = ft.Container(
         top=0, left=0, right=0, bottom=0,
         visible=False,
-        content=main_ui_column
+        content=main_ui_column,
+        clip_behavior=ft.ClipBehavior.HARD_EDGE
     )
 
     main_layout_container = ft.Container(
@@ -5843,25 +5845,39 @@ async def main(page: ft.Page):
             # Get current accent for tint
             accent = page.theme.color_scheme_seed or ft.Colors.INDIGO_ACCENT
             
-            # Show and style the sandwich foundation
+            # Aggressive Transparency Pass
+            try:
+                # Use a specific almost-transparent hex to 'wake up' the compositor
+                page.window.bgcolor = "#01000000" 
+                page.window.frameless = True
+            except AttributeError:
+                page.window_bgcolor = "#01000000"
+                page.window_frameless = True
+            
+            page.bgcolor = "transparent"
+            
+            # Get current accent for tint
+            accent = page.theme.color_scheme_seed or ft.Colors.INDIGO_ACCENT
+            
+            # 1. Deep Tint Foundation
             tint_layer.visible = True
-            tint_layer.bgcolor = ft.Colors.with_opacity(0.25, accent) 
+            tint_layer.bgcolor = ft.Colors.with_opacity(0.4, accent) 
             tint_layer.border_radius = 20
             
-            # Use the frosted glass wrap
+            # 2. Hyper-Frost Sheet
             glass_blur_layer.visible = True
-            glass_blur_layer.bgcolor = ft.Colors.with_opacity(0.12, ft.Colors.WHITE) # Visible frost "ink"
-            glass_blur_layer.blur = ft.Blur(40, 40) # Gaussian backdrop blur
+            glass_blur_layer.bgcolor = ft.Colors.with_opacity(0.2, ft.Colors.WHITE) # Heavier frost ink
+            glass_blur_layer.blur = ft.Blur(sigma_x=60, sigma_y=60, tile_mode=ft.BlurTileMode.REPEATED)
             glass_blur_layer.border_radius = 20
-            glass_blur_layer.border = ft.Border.all(1, ft.Colors.with_opacity(0.2, ft.Colors.WHITE))
+            glass_blur_layer.border = ft.Border.all(2, ft.Colors.with_opacity(0.2, ft.Colors.WHITE))
             
-            # Main container: Keep it transparent so we see the layers through it
+            # 3. App container shadow to make the glass pop
             main_layout_container.bgcolor = ft.Colors.TRANSPARENT
             main_layout_container.border_radius = 20
             main_layout_container.shadow = ft.BoxShadow(
-                spread_radius=1,
-                blur_radius=25,
-                color="black45",
+                spread_radius=2,
+                blur_radius=30,
+                color="black54",
                 offset=ft.Offset(0, 0),
             )
             
