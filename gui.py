@@ -17,6 +17,8 @@ from playsound import playsound
 import httpx
 import platform
 import urllib.parse
+import shlex
+import inspect
 
 APP_VERSION = "Dev Build"
 
@@ -446,9 +448,7 @@ async def main(page: ft.Page):
     # Window Initialization
     is_windows = (sys.platform == "win32")
     
-    # Force transparency disabled on non-Windows for now
-    if not is_windows:
-        user_settings["transparent_app"] = False
+    # Transparency logic is handled in apply_transparency()
 
     if user_settings.get("transparent_app", False):
         try:
@@ -539,6 +539,77 @@ async def main(page: ft.Page):
             import os
             # Note: sys is imported at top level
             os._exit(0)
+
+    async def restart_app():
+        """Restart the application with clean environment using a helper script."""
+        try: cleanup_temp()
+        except: pass
+        
+        current_exe = sys.executable
+        makeself_path = os.environ.get("MAKESELF_PATH")
+        if makeself_path and os.path.exists(makeself_path):
+            current_exe = makeself_path
+            
+        sys_name = platform.system()
+        
+        # Determine relaunch command
+        if getattr(sys, 'frozen', False) or (makeself_path and os.path.exists(makeself_path)):
+            argv = [current_exe] + sys.argv[1:]
+        else:
+            # Script mode: relaunch with python + the entry script (sys.argv[0])
+            argv = [sys.executable, sys.argv[0]] + sys.argv[1:]
+            
+        full_cmd = " ".join([shlex.quote(arg) for arg in argv])
+        
+        # Close the window gracefully first if possible
+        try:
+            res = page.window.destroy()
+            if inspect.iscoroutine(res):
+                await res
+        except:
+            try:
+                res = page.window_destroy()
+                if inspect.iscoroutine(res):
+                    await res
+            except: pass
+
+        if sys_name == "Windows":
+            # Create a robust batch file that handles the relaunch
+            batch_path = os.path.join(tempfile.gettempdir(), "restart_vu.bat")
+            with open(batch_path, "w") as f:
+                f.write(f"@echo off\n")
+                f.write(f"timeout /t 2 /nobreak > nul\n")
+                f.write(f"set _MEIPASS=\n")
+                f.write(f"start \"\" {full_cmd}\n")
+                f.write(f"del \"%~f0\"\n")
+            
+            subprocess.Popen(
+                ["cmd.exe", "/c", batch_path], 
+                creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NO_WINDOW
+            )
+            os._exit(0)
+            
+        elif sys_name == "Linux":
+            # Create a shell script to handle relaunch
+            sh_path = os.path.join(tempfile.gettempdir(), "restart_vu.sh")
+            with open(sh_path, "w") as f:
+                f.write(f"#!/bin/bash\n")
+                f.write(f"sleep 2\n")
+                f.write(f"unset _MEIPASS\n")
+                f.write(f"{full_cmd} &\n")
+                f.write(f"disown\n")
+                f.write(f"rm \"$0\"\n")
+            os.chmod(sh_path, 0o755)
+            subprocess.Popen(["/bin/bash", sh_path])
+            os._exit(0)
+        else:
+            # Fallback for other platforms
+            subprocess.Popen([sys.executable] + sys.argv[1:])
+            os._exit(0)
+
+
+
+
 
 
 
@@ -5172,6 +5243,7 @@ async def main(page: ft.Page):
             page.theme.color_scheme_seed = getattr(ft.Colors, color_name, ft.Colors.INDIGO_ACCENT)
             
         save_settings(user_settings)
+        apply_transparency()
         page.update()
 
     # --- Settings View ---
@@ -5182,8 +5254,7 @@ async def main(page: ft.Page):
     setting_transparent_switch = ft.Switch(
         value=user_settings.get("transparent_app", False), 
         on_change=lambda e: toggle_setting("transparent_app", e), 
-        active_color=ft.Colors.PRIMARY,
-        disabled=(sys.platform != "win32")
+        active_color=ft.Colors.PRIMARY
     )
     
     custom_font_field = ft.TextField(
@@ -5227,31 +5298,48 @@ async def main(page: ft.Page):
             path = custom_font_field.value
             if not path: return
             try:
-                # Register font
-                font_name = "UserCustomFont"
-                page.fonts[font_name] = path
-                page.theme.font_family = font_name
+                # Save settings first
                 user_settings["custom_font_path"] = path
                 user_settings["custom_font_family"] = "" # Reset dropdown
                 system_font_dropdown.value = "System Default"
                 save_settings(user_settings)
-                page.update()
-                log(f"✅ Applied custom font file: {os.path.basename(path)}")
-            except Exception as ex:
-                log(f"❌ Failed to load font: {ex}")
-                show_error(f"Could not load custom font: {ex}")
+                
+                # Create restart prompt
+                async def on_restart(e):
+                    restart_diag.open = False
+                    page.update()
+                    await restart_app()
 
-    def pick_custom_font(e):
-        def on_pick(res: ft.FilePickerResultEvent):
-            if res.files:
-                custom_font_field.value = res.files[0].path
-                custom_font_field.update()
-                apply_custom_font()
-        
-        picker = ft.FilePicker(on_result=on_pick)
-        page.overlay.append(picker)
-        page.update()
-        picker.pick_files(allowed_extensions=["ttf", "otf"])
+
+                restart_diag = ft.AlertDialog(
+                    modal=True,
+                    title=ft.Text("Restart Required"),
+                    content=ft.Text("To apply a custom font file, the application must be restarted to load the font into its engine."),
+                    actions=[
+                        ft.TextButton("Later", on_click=lambda _: (setattr(restart_diag, "open", False), page.update())),
+                        ft.ElevatedButton("Restart Now", on_click=on_restart, bgcolor=ft.Colors.PRIMARY, color=ft.Colors.ON_PRIMARY),
+                    ],
+                    actions_alignment=ft.MainAxisAlignment.END,
+                )
+                
+                page.overlay.append(restart_diag)
+                restart_diag.open = True
+                page.update()
+                
+                log(f"✅ Custom font path saved. Restart required.")
+            except Exception as ex:
+                log(f"❌ Failed to save font setting: {ex}")
+                show_error(f"Could not save custom font setting: {ex}")
+
+    async def pick_custom_font(e):
+        res = await file_picker.pick_files(allowed_extensions=["ttf", "otf"])
+        if res:
+            custom_font_field.value = res[0].path
+            custom_font_field.update()
+            apply_custom_font()
+
+
+
 
     setting_logs_switch = ft.Switch(value=user_settings.get("show_logs", False), on_change=lambda e: toggle_setting("show_logs", e), active_color=ft.Colors.PRIMARY)
 
@@ -5294,7 +5382,7 @@ async def main(page: ft.Page):
                                     ft.Column([
                                         ft.Text("Transparent App", size=16, weight=ft.FontWeight.W_600),
                                         ft.Text(
-                                            "Make the background transparent and blur it." if sys.platform == "win32" else "Unavailable on Linux until fix found", 
+                                            "Make the background transparent with frosted glass blur.", 
                                             size=12, 
                                             color=ft.Colors.ON_SURFACE_VARIANT
                                         ),
@@ -5310,10 +5398,9 @@ async def main(page: ft.Page):
                                    ft.Icon(ft.Icons.FONT_DOWNLOAD_ROUNDED, size=20),
                                    ft.Text("Custom Font", size=16, weight=ft.FontWeight.W_600),
                                ], spacing=15),
-                               ft.Row([
+                                ft.Row([
                                    custom_font_field,
                                    ft.IconButton(ft.Icons.FOLDER_OPEN_ROUNDED, on_click=pick_custom_font, tooltip="Browse for .ttf/.otf"),
-                                   ft.IconButton(ft.Icons.CHECK_CIRCLE_ROUNDED, on_click=apply_custom_font, tooltip="Apply Font", icon_color=ft.Colors.PRIMARY),
                                ], spacing=10),
                                ft.Row([
                                    system_font_dropdown,
@@ -5691,45 +5778,49 @@ async def main(page: ft.Page):
         )
     )
 
+    glass_layer = ft.Container(expand=True, visible=False)
+    
+    main_ui_column = ft.Column([
+        title_bar,
+        ft.Container(
+            content=ft.Column([
+                # Header (Centered Tabs)
+                ft.Stack([
+                    ft.Row([tab_bar], alignment=ft.MainAxisAlignment.CENTER),
+                ], height=TAB_HEIGHT, clip_behavior=ft.ClipBehavior.NONE),
+                
+                ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
+                
+                # Main Views (Clipped Container for Slide Transition)
+                ft.Container(
+                    content=ft.Stack([
+                        compressor_view_col,
+                        converter_view_col,
+                        trimmer_view_col,
+                        merger_view_col,
+                        more_view_col,
+                        settings_view_col,
+                        about_view_col,
+                        audio_view_col
+                    ]),
+                    expand=True,
+                    clip_behavior=ft.ClipBehavior.HARD_EDGE
+                )
+            ], expand=True),
+            expand=True,
+            padding=15
+        )
+    ], expand=True, spacing=0)
+
     main_layout_container = ft.Container(
-        content=ft.Column([
-            title_bar,
-            ft.Container(
-                content=ft.Column([
-                    # Header (Centered Tabs)
-                    ft.Stack([
-                        ft.Row([tab_bar], alignment=ft.MainAxisAlignment.CENTER),
-                    ], height=TAB_HEIGHT, clip_behavior=ft.ClipBehavior.NONE),
-                    
-                    ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
-                    
-                    # Main Views (Clipped Container for Slide Transition)
-                    ft.Container(
-                        content=ft.Stack([
-                            compressor_view_col,
-                            converter_view_col,
-                            trimmer_view_col,
-                            merger_view_col,
-                            more_view_col,
-                            settings_view_col,
-                            about_view_col,
-                            audio_view_col
-                        ]),
-                        expand=True,
-                        clip_behavior=ft.ClipBehavior.HARD_EDGE
-                    )
-                ], expand=True),
-                expand=True,
-                padding=15
-            )
-        ], expand=True, spacing=0),
+        content=ft.Stack([
+            glass_layer,
+            main_ui_column
+        ]),
         expand=True
     )
     
     def apply_transparency():
-        if sys.platform != "win32":
-            return
-            
         if user_settings.get("transparent_app", False):
             try:
                 page.window.bgcolor = "transparent"
@@ -5740,36 +5831,45 @@ async def main(page: ft.Page):
             
             page.bgcolor = "transparent"
             
-            # Match the working test aesthetic
-            main_layout_container.bgcolor = "#263238" # blueGrey900
-            main_layout_container.opacity = 0.85
+            # Get current accent for tint
+            accent = page.theme.color_scheme_seed or ft.Colors.INDIGO_ACCENT
+            
+            # Show and style the dedicated glass layer
+            glass_layer.visible = True
+            glass_layer.bgcolor = ft.Colors.with_opacity(0.15, accent)
+            glass_layer.blur = ft.Blur(40, 40) # Stronger blur on dedicated layer
+            glass_layer.border_radius = 20
+            glass_layer.border = ft.Border.all(1, ft.Colors.with_opacity(0.2, ft.Colors.WHITE))
+            
+            # App container styling (mostly layout/radius)
+            main_layout_container.bgcolor = ft.Colors.TRANSPARENT
             main_layout_container.border_radius = 20
-            main_layout_container.border = ft.Border.all(1, "white24")
             main_layout_container.shadow = ft.BoxShadow(
                 spread_radius=1,
-                blur_radius=15,
-                color="black54",
+                blur_radius=20,
+                color="black38",
                 offset=ft.Offset(0, 0),
             )
             
             # Ensure title bar matches
             try:
-                title_bar.content.bgcolor = ft.Colors.TRANSPARENT # Overlay on the container
+                title_bar.content.bgcolor = ft.Colors.with_opacity(0.1, ft.Colors.BLACK)
             except: pass
-            
-            main_layout_container.blur = None # Test script didn't use blur, used opacity
         else:
-            page.window.bgcolor = ft.Colors.SURFACE
+            try:
+                page.window.bgcolor = ft.Colors.SURFACE
+            except:
+                page.window_bgcolor = ft.Colors.SURFACE
+                
             page.bgcolor = ft.Colors.SURFACE
-            main_layout_container.bgcolor = None
-            main_layout_container.opacity = 1.0
+            glass_layer.visible = False
+            main_layout_container.bgcolor = ft.Colors.SURFACE
             main_layout_container.border_radius = 0
-            main_layout_container.border = None
             main_layout_container.shadow = None
-            main_layout_container.blur = None
             try:
                 title_bar.content.bgcolor = ft.Colors.SURFACE_CONTAINER_LOW
             except: pass
+
 
 
     apply_transparency()
