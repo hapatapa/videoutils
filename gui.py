@@ -5778,7 +5778,9 @@ async def main(page: ft.Page):
         )
     )
 
-    glass_layer = ft.Container(expand=True, visible=False)
+    # Glass Layer Sandwich: [Tint] -> [Blur] -> [UI]
+    tint_layer = ft.Container(expand=True, visible=False)
+    glass_blur_layer = ft.Container(expand=True, visible=False)
     
     main_ui_column = ft.Column([
         title_bar,
@@ -5814,7 +5816,8 @@ async def main(page: ft.Page):
 
     main_layout_container = ft.Container(
         content=ft.Stack([
-            glass_layer,
+            tint_layer,
+            glass_blur_layer,
             main_ui_column
         ]),
         expand=True
@@ -5834,14 +5837,17 @@ async def main(page: ft.Page):
             # Get current accent for tint
             accent = page.theme.color_scheme_seed or ft.Colors.INDIGO_ACCENT
             
-            # Show and style the dedicated glass layer
-            glass_layer.visible = True
-            glass_layer.bgcolor = ft.Colors.with_opacity(0.15, accent)
-            glass_layer.blur = ft.Blur(40, 40) # Stronger blur on dedicated layer
-            glass_layer.border_radius = 20
-            glass_layer.border = ft.Border.all(1, ft.Colors.with_opacity(0.2, ft.Colors.WHITE))
+            # Show and style the sandwich: tint first, then blur OVER it
+            tint_layer.visible = True
+            tint_layer.bgcolor = ft.Colors.with_opacity(0.18, accent)
+            tint_layer.border_radius = 20
             
-            # App container styling (mostly layout/radius)
+            glass_blur_layer.visible = True
+            glass_blur_layer.blur = ft.Blur(25, 25, ft.BlurTileMode.REPEATED)
+            glass_blur_layer.border_radius = 20
+            glass_blur_layer.border = ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.WHITE))
+            
+            # App container styling
             main_layout_container.bgcolor = ft.Colors.TRANSPARENT
             main_layout_container.border_radius = 20
             main_layout_container.shadow = ft.BoxShadow(
@@ -5862,13 +5868,15 @@ async def main(page: ft.Page):
                 page.window_bgcolor = ft.Colors.SURFACE
                 
             page.bgcolor = ft.Colors.SURFACE
-            glass_layer.visible = False
+            tint_layer.visible = False
+            glass_blur_layer.visible = False
             main_layout_container.bgcolor = ft.Colors.SURFACE
             main_layout_container.border_radius = 0
             main_layout_container.shadow = None
             try:
                 title_bar.content.bgcolor = ft.Colors.SURFACE_CONTAINER_LOW
             except: pass
+
 
 
 
