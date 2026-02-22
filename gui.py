@@ -64,9 +64,9 @@ class UpdateManager:
             target_name = "VideoUtilities-Windows.exe"
         elif sys_name == "Linux":
             # Detect if we are running from a .run (self-extractor) or the Native (tar.gz) version
-            # Standalone builds (makeself) extract to /tmp by default.
+            # MAKESELF_PATH is set by our custom build wrapper in build.yml
             exec_path = sys.executable
-            if exec_path.startswith("/tmp") or "/tmp/" in exec_path or "/.mount_" in exec_path:
+            if os.environ.get("MAKESELF_PATH") or exec_path.startswith("/tmp") or "/tmp/" in exec_path or "/.mount_" in exec_path:
                 target_name = "VideoUtilities-Linux.run"
             else:
                 # If running from a home directory or /opt without being in /tmp, assume Native
@@ -135,6 +135,8 @@ class UpdateManager:
 
         if sys_name == "Windows":
             # Create a more robust batch file that retries deletion (handles AV locks)
+            # IMPORTANT: We MUST unset _MEIPASS so the new process doesn't try to use
+            # the old extraction folder (which leads to "Failed to load Python DLL").
             batch_path = os.path.join(tempfile.gettempdir(), "update_vu.bat")
             with open(batch_path, "w") as f:
                 f.write(f"@echo off\n")
@@ -146,6 +148,8 @@ class UpdateManager:
                 f.write(f"    goto retry_del\n")
                 f.write(f")\n")
                 f.write(f"move /y \"{new_asset}\" \"{current_exe}\"\n")
+                # Clear PyInstaller environment to ensure clean extraction for the new version
+                f.write(f"set _MEIPASS=\n")
                 f.write(f"start \"\" \"{current_exe}\"\n")
                 f.write(f"del \"%~f0\"\n")
             
@@ -164,6 +168,8 @@ class UpdateManager:
                 f.write(f"sleep 2\n")
                 f.write(f"mv -f \"{new_asset}\" \"{current_exe}\"\n")
                 f.write(f"chmod +x \"{current_exe}\"\n")
+                # Clear environment variables that might interfere with a clean relaunch
+                f.write(f"unset _MEIPASS\n")
                 # For makeself, we don't necessarily want to relaunch the *installer* 
                 # but in most cases, it's what the user wants to see next.
                 f.write(f"\"{current_exe}\" &\n")
