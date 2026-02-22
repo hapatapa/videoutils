@@ -5779,8 +5779,9 @@ async def main(page: ft.Page):
     )
 
     # Glass Layer Sandwich: [Tint] -> [Blur] -> [UI]
-    tint_layer = ft.Container(expand=True, visible=False)
-    glass_blur_layer = ft.Container(expand=True, visible=False)
+    # We use explicit positioning (top, left, etc.) to ensure they fill the Stack
+    tint_layer = ft.Container(top=0, left=0, right=0, bottom=0, visible=False)
+    glass_blur_layer = ft.Container(top=0, left=0, right=0, bottom=0, visible=False)
     
     main_ui_column = ft.Column([
         title_bar,
@@ -5839,13 +5840,13 @@ async def main(page: ft.Page):
             
             # Show and style the sandwich: [Tint Base] -> [Blurred Glass Sheet] -> [UI]
             tint_layer.visible = True
-            tint_layer.bgcolor = ft.Colors.with_opacity(0.22, accent)
+            tint_layer.bgcolor = ft.Colors.with_opacity(0.3, accent) # Slightly higher opacity for visibility
             tint_layer.border_radius = 20
             
             # The Glass Sheet: Must have a color for the blur to have something to process
             glass_blur_layer.visible = True
-            glass_blur_layer.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.WHITE)
-            glass_blur_layer.blur = ft.Blur(45, 45, ft.BlurTileMode.MIRROR) # Deep frost
+            glass_blur_layer.bgcolor = ft.Colors.with_opacity(0.08, ft.Colors.WHITE) # Slightly more "milk" for the frost
+            glass_blur_layer.blur = ft.Blur(50, 50, ft.BlurTileMode.MIRROR) # Deep frost
             glass_blur_layer.border_radius = 20
             glass_blur_layer.border = ft.Border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.WHITE))
             
