@@ -37,8 +37,55 @@ DEFAULT_SETTINGS = {
     "use_gpu": True,
     "follow_os_theme": False,
     "comic_sans_unlocked": False,
-    "comic_sans_active": False
+    "comic_sans_active": False,
+    "transparent_app": False,
+    "custom_font_path": "",
+    "custom_font_family": ""
 }
+
+def get_system_fonts():
+    # Common fallback fonts
+    fonts = ["System Default", "Roboto Flex"]
+    try:
+        import platform as _platform
+        import subprocess as _subprocess
+        sys_type = _platform.system()
+        
+        if sys_type == "Linux":
+            # Use fc-list on Linux
+            res = _subprocess.run(["fc-list", ":lang=en", "family"], capture_output=True, text=True, timeout=2.0)
+            if res.returncode == 0:
+                for line in res.stdout.splitlines():
+                    # fc-list output when family is requested is usually "Family Name" 
+                    # or "Family1,Family2"
+                    family = line.strip().split(",")[0]
+                    if family and len(family) < 40 and not family.startswith("."):
+                        fonts.append(family)
+        elif sys_type == "Windows":
+            # Registry query for fonts on Windows
+            cmd = ["reg", "query", "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts"]
+            res = _subprocess.run(cmd, capture_output=True, text=True, timeout=2.0)
+            if res.returncode == 0:
+                for line in res.stdout.splitlines():
+                    if "(TrueType)" in line or "(OpenType)" in line:
+                        family = line.split("  ")[0].strip()
+                        # Clean up suffixes
+                        for suffix in [" (TrueType)", " (OpenType)", " & ", " Regular"]:
+                            if suffix in family: family = family.split(suffix)[0]
+                        if family and len(family) < 40:
+                            fonts.append(family)
+    except: pass
+    
+    # Deduplicate
+    seen = set()
+    unique_fonts = [x for x in fonts if not (x in seen or seen.add(x))]
+    
+    # Sort the list after the first two items (System Default, Roboto Flex)
+    # and filter out some technical fonts (starting with dot or having many non-alphanumeric chars)
+    header = unique_fonts[:2]
+    body = [f for f in unique_fonts[2:] if not f.startswith(".") and "." not in f]
+    
+    return header + sorted(body)
 
 def is_system_dark_mode():
     try:
@@ -157,6 +204,29 @@ async def main(page: ft.Page):
     current_tab = ""
     page.title = "Video Utilities"
     page.theme_animation = ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT)
+
+    # Register base fonts
+    if page.fonts is None:
+        page.fonts = {}
+    page.fonts.update({
+        "Roboto Flex": "https://raw.githubusercontent.com/google/fonts/main/ofl/robotoflex/RobotoFlex%5BGRAD%2COops%2CYOPQ%2CYTLC%2CYTAS%2CYTDE%2CYTFI%2CYTUC%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf",
+        "Comic Neue": "https://raw.githubusercontent.com/google/fonts/main/ofl/comicneue/ComicNeue-Regular.ttf"
+    })
+
+    # Apply Custom Font if set
+    custom_path = user_settings.get("custom_font_path", "")
+    custom_family = user_settings.get("custom_font_family", "System Default")
+    
+    applied_font = "Roboto Flex"
+    if custom_path and os.path.exists(custom_path):
+        try:
+            page.fonts["UserCustomFont"] = custom_path
+            applied_font = "UserCustomFont"
+        except: pass
+    elif custom_family and custom_family != "System Default":
+        applied_font = custom_family
+    elif user_settings.get("comic_sans_active", False):
+        applied_font = "Comic Neue"
     
     # Set Theme Mode
     if user_settings.get("follow_os_theme", False):
@@ -187,14 +257,9 @@ async def main(page: ft.Page):
 
     threading.Thread(target=theme_poll_loop, daemon=True).start()
     
-    page.fonts = {
-        "Roboto Flex": "https://raw.githubusercontent.com/google/fonts/main/ofl/robotoflex/RobotoFlex%5BGRAD%2COops%2CYOPQ%2CYTLC%2CYTAS%2CYTDE%2CYTFI%2CYTUC%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf",
-        "Comic Neue": "https://raw.githubusercontent.com/google/fonts/main/ofl/comicneue/ComicNeue-Regular.ttf"
-    }
-    
     # Set Accent Color & Font
     accent_name = str(user_settings.get("accent_color", "INDIGO_ACCENT"))
-    default_font = "Comic Neue" if user_settings.get("comic_sans_active", False) else "Roboto Flex"
+    default_font = applied_font
     
     seed = ft.Colors.INDIGO_ACCENT
     if accent_name.startswith("#"):
@@ -219,27 +284,36 @@ async def main(page: ft.Page):
                     threading.Thread(target=lambda: playsound(sound_path), daemon=True).start()
                 except: pass
 
-    # Window Initialization (Flet 0.80.2 Compatible)
-    try:
-        # Modern Style (introduced around 0.80.2)
+    # Window Initialization
+    is_windows = (sys.platform == "win32")
+    
+    # Force transparency disabled on non-Windows for now
+    if not is_windows:
+        user_settings["transparent_app"] = False
+
+    if user_settings.get("transparent_app", False):
+        try:
+            page.window.bgcolor = "transparent"
+            page.window.frameless = True
+        except AttributeError:
+            page.window_bgcolor = "transparent"
+            page.window_frameless = True
+        page.bgcolor = "transparent"
+    else:
+        # Standard Opaque Initialization
         page.window.title_bar_hidden = True
         page.window.title_bar_buttons_hidden = True
-        # On Windows, title_bar_hidden sometimes needs frameless for the custom ones to work
-        if sys.platform == "win32":
+        if is_windows:
             page.window.frameless = True
-    except:
-        # Legacy Style 
-        try:
-            page.window_title_bar_hidden = True
-            page.window_title_bar_buttons_hidden = True
-        except: pass
 
-    page.padding = 0
     page.window.min_width = 1143
     page.window.min_height = 841
     page.window.resizable = True
     page.window.icon = "Icon.png"
+    page.padding = 0
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+
+    # Transparency logic is handled in apply_transparency()
 
     # --- Cleanup Logic ---
     def cleanup_temp():
@@ -448,7 +522,34 @@ async def main(page: ft.Page):
     denoise_switch = ft.Ref[ft.Switch]()
     aq_switch = ft.Ref[ft.Switch]()
     cpu_used_slider = ft.Ref[ft.Slider]()
-    
+
+    # Resolution Control Refs
+    res_mode_dropdown = ft.Ref[ft.Dropdown]()
+    res_fixed_dropdown = ft.Ref[ft.Dropdown]()
+    res_min_dropdown = ft.Ref[ft.Dropdown]()
+    res_max_dropdown = ft.Ref[ft.Dropdown]()
+    res_auto_row = ft.Ref[ft.Row]()
+    res_fixed_row = ft.Ref[ft.Row]()
+
+    # Extra Advanced Params Refs
+    fps_dropdown = ft.Ref[ft.Dropdown]()
+    colorspace_dropdown = ft.Ref[ft.Dropdown]()
+    comp_acodec_dropdown = ft.Ref[ft.Dropdown]()
+    denoise_luma_slider = ft.Ref[ft.Slider]()
+    denoise_chroma_slider = ft.Ref[ft.Slider]()
+    denoise_luma_temp_slider = ft.Ref[ft.Slider]()
+    denoise_chroma_temp_slider = ft.Ref[ft.Slider]()
+    strip_metadata_switch = ft.Ref[ft.Switch]()
+    audio_highpass_slider = ft.Ref[ft.Slider]()
+    audio_lowpass_slider = ft.Ref[ft.Slider]()
+    meta_title_input = ft.Ref[ft.TextField]()
+    meta_author_input = ft.Ref[ft.TextField]()
+    res_custom_row = ft.Ref[ft.Row]()
+    res_width_input = ft.Ref[ft.TextField]()
+    res_height_input = ft.Ref[ft.TextField]()
+    fps_custom_row = ft.Ref[ft.Row]()
+    fps_custom_input = ft.Ref[ft.TextField]()
+
     # Custom progress bar helper
     def update_progress_bar(pct):
         if not progress_fill.current or not page.window.width: return
@@ -991,6 +1092,24 @@ async def main(page: ft.Page):
     def on_size_input_change(e):
         on_text_change(e)
 
+    def on_res_mode_change(e):
+        mode = e.control.value
+        if res_auto_row.current:
+            res_auto_row.current.visible = (mode == "auto")
+            res_auto_row.current.update()
+        if res_fixed_row.current:
+            res_fixed_row.current.visible = (mode == "fixed")
+            res_fixed_row.current.update()
+        if res_custom_row.current:
+            res_custom_row.current.visible = (mode == "custom")
+            res_custom_row.current.update()
+
+    def on_fps_change(e):
+        is_custom = e.control.value == "custom"
+        if fps_custom_row.current:
+            fps_custom_row.current.visible = is_custom
+            fps_custom_row.current.update()
+
     def on_codec_change(e):
         # We no longer disable a local toggle here. 
         # Codecs like H.266 simply won't find a GPU encoder in logic.get_encoder
@@ -1081,8 +1200,17 @@ async def main(page: ft.Page):
         user_settings["comic_sans_active"] = is_active
         save_settings(user_settings)
         
-        # Immediate reflection
-        page.theme.font_family = "Comic Neue" if is_active else "Roboto Flex"
+        # Determine fallback font (Custom > System > Default)
+        fallback = "Roboto Flex"
+        custom_path = user_settings.get("custom_font_path", "")
+        custom_family = user_settings.get("custom_font_family", "System Default")
+        
+        if custom_path and os.path.exists(custom_path):
+            fallback = "UserCustomFont"
+        elif custom_family and custom_family != "System Default":
+            fallback = custom_family
+            
+        page.theme.font_family = "Comic Neue" if is_active else fallback
         page.update()
 
     # --- Advanced Settings Dialog ---
@@ -1109,6 +1237,100 @@ async def main(page: ft.Page):
             content=ft.Column([
                 ft.Text("Fine-tune your encoding parameters for maximum quality:", color=ft.Colors.ON_SURFACE_VARIANT, size=13),
                 ft.Divider(),
+                # --- Resolution Controls (Moved from Main UI) ---
+                ft.Column([
+                    ft.Row([
+                        ft.Icon(ft.Icons.ASPECT_RATIO_ROUNDED, size=20, color=ft.Colors.PRIMARY),
+                        ft.Text("Resolution Settings", weight=ft.FontWeight.W_900, size=14),
+                    ], spacing=10),
+                    ft.Row([
+                        ft.Dropdown(
+                            ref=res_mode_dropdown,
+                            label="Mode",
+                            value="auto",
+                            options=[
+                                ft.DropdownOption("auto", "Auto (Scale Down)"),
+                                ft.DropdownOption("fixed", "Fixed"),
+                                ft.DropdownOption("custom", "Custom"),
+                            ],
+                            on_select=on_res_mode_change,
+                            border_radius=10,
+                            text_size=13,
+                            content_padding=5,
+                            height=40,
+                            width=170,
+                        ),
+                        # Auto sub-row: optional min & max
+                        ft.Row(ref=res_auto_row, controls=[
+                            ft.Dropdown(
+                                ref=res_min_dropdown,
+                                label="Min Res",
+                                value=None,
+                                options=[
+                                    ft.DropdownOption(None, "None (any)"),
+                                    ft.DropdownOption("240", "240p"),
+                                    ft.DropdownOption("360", "360p"),
+                                    ft.DropdownOption("480", "480p"),
+                                    ft.DropdownOption("720", "720p"),
+                                    ft.DropdownOption("1080", "1080p"),
+                                ],
+                                border_radius=10,
+                                text_size=13,
+                                content_padding=5,
+                                height=40,
+                                width=120,
+                            ),
+                            ft.Dropdown(
+                                ref=res_max_dropdown,
+                                label="Max Res",
+                                value=None,
+                                options=[
+                                    ft.DropdownOption(None, "None (any)"),
+                                    ft.DropdownOption("360", "360p"),
+                                    ft.DropdownOption("480", "480p"),
+                                    ft.DropdownOption("720", "720p"),
+                                    ft.DropdownOption("1080", "1080p"),
+                                    ft.DropdownOption("1440", "1440p"),
+                                ],
+                                border_radius=10,
+                                text_size=13,
+                                content_padding=5,
+                                height=40,
+                                width=120,
+                            ),
+                        ], spacing=8, visible=True),
+                        # Fixed sub-row
+                        ft.Row(ref=res_fixed_row, controls=[
+                            ft.Dropdown(
+                                ref=res_fixed_dropdown,
+                                label="Resolution",
+                                value="1080",
+                                options=[
+                                    ft.DropdownOption("240", "240p"),
+                                    ft.DropdownOption("360", "360p"),
+                                    ft.DropdownOption("480", "480p"),
+                                    ft.DropdownOption("720", "720p"),
+                                    ft.DropdownOption("1080", "1080p"),
+                                    ft.DropdownOption("1440", "1440p"),
+                                    ft.DropdownOption("2160", "2160p (4K)"),
+                                ],
+                                border_radius=10,
+                                text_size=13,
+                                content_padding=5,
+                                height=40,
+                                width=140,
+                            ),
+                        ], visible=False),
+                        # Custom sub-row
+                        ft.Row(ref=res_custom_row, controls=[
+                            ft.TextField(ref=res_width_input, label="Width", width=80, height=40, text_size=13, border_radius=10, content_padding=5),
+                            ft.Text("x", size=14),
+                            ft.TextField(ref=res_height_input, label="Height", width=80, height=40, text_size=13, border_radius=10, content_padding=5),
+                        ], visible=False, spacing=5),
+                    ], spacing=10, wrap=True),
+                ], spacing=10),
+                ft.Divider(),
+                # --- Two-Pass ---
                 ft.Container(
                     content=ft.Row([
                         ft.Column([
@@ -1119,6 +1341,7 @@ async def main(page: ft.Page):
                     ]),
                     tooltip="Analyzes video once before encoding to optimize bitrate distribution, doubling the encoding time but maximizing quality."
                 ),
+                # --- 10-Bit ---
                 ft.Container(
                     content=ft.Row([
                         ft.Column([
@@ -1129,16 +1352,36 @@ async def main(page: ft.Page):
                     ]),
                     tooltip="Increases color depth to prevent banding in gradients and improve HDR fidelity using the yuv420p10le format."
                 ),
+                # --- Denoising (with level sliders) ---
                 ft.Container(
-                    content=ft.Row([
-                        ft.Column([
-                            ft.Text("Video Denoising", weight=ft.FontWeight.W_900, size=14),
-                            ft.Text("HQDN3D spatio-temporal filter", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-                        ], expand=True),
-                        ft.Switch(ref=denoise_switch, value=False, active_color=ft.Colors.PRIMARY)
-                    ]),
-                    tooltip="Removes grain and sensor noise using the hqdn3d filter, which helps the encoder focus on real details."
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Column([
+                                ft.Text("Video Denoising", weight=ft.FontWeight.W_900, size=14),
+                                ft.Text("HQDN3D spatio-temporal filter", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                            ], expand=True),
+                            ft.Switch(ref=denoise_switch, value=False, active_color=ft.Colors.PRIMARY)
+                        ]),
+                        ft.Row([
+                            ft.Text("Luma Spatial:", size=12, color=ft.Colors.ON_SURFACE_VARIANT, width=110),
+                            ft.Slider(ref=denoise_luma_slider, min=0, max=15, divisions=15, value=4, label="{value}", expand=True, active_color=ft.Colors.PRIMARY),
+                        ]),
+                        ft.Row([
+                            ft.Text("Chroma Spatial:", size=12, color=ft.Colors.ON_SURFACE_VARIANT, width=110),
+                            ft.Slider(ref=denoise_chroma_slider, min=0, max=15, divisions=15, value=3, label="{value}", expand=True, active_color=ft.Colors.PRIMARY),
+                        ]),
+                        ft.Row([
+                            ft.Text("Luma Temporal:", size=12, color=ft.Colors.ON_SURFACE_VARIANT, width=110),
+                            ft.Slider(ref=denoise_luma_temp_slider, min=0, max=15, divisions=15, value=6, label="{value}", expand=True, active_color=ft.Colors.PRIMARY),
+                        ]),
+                        ft.Row([
+                            ft.Text("Chroma Temporal:", size=12, color=ft.Colors.ON_SURFACE_VARIANT, width=110),
+                            ft.Slider(ref=denoise_chroma_temp_slider, min=0, max=15, divisions=15, value=5, label="{value}", expand=True, active_color=ft.Colors.PRIMARY),
+                        ]),
+                    ], spacing=2),
+                    tooltip="Removes grain and noise. Luma affects brightness, Chroma affects color noise. Spatial is for static noise, Temporal is for noise across frames."
                 ),
+                # --- AQ ---
                 ft.Container(
                     content=ft.Row([
                         ft.Column([
@@ -1150,6 +1393,100 @@ async def main(page: ft.Page):
                     tooltip="Detects moving objects and complex textures to prioritize them for higher quality while compressing static areas more aggressively."
                 ),
                 ft.Divider(),
+                # --- Frame Rate ---
+                ft.Row([
+                    ft.Column([
+                        ft.Text("Frame Rate (FPS)", weight=ft.FontWeight.W_900, size=14),
+                        ft.Text("Leave as 'Source' to keep original", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                    ], expand=True),
+                    ft.Dropdown(
+                        ref=fps_dropdown,
+                        label="FPS",
+                        value=None,
+                        options=[
+                            ft.DropdownOption(None, "Source"),
+                            ft.DropdownOption("15", "15 fps"),
+                            ft.DropdownOption("24", "24 fps"),
+                            ft.DropdownOption("25", "25 fps (PAL)"),
+                            ft.DropdownOption("30", "30 fps"),
+                            ft.DropdownOption("48", "48 fps"),
+                            ft.DropdownOption("60", "60 fps"),
+                            ft.DropdownOption("120", "120 fps"),
+                            ft.DropdownOption("custom", "Custom..."),
+                        ],
+                        on_select=on_fps_change,
+                        border_radius=10,
+                        text_size=13,
+                        content_padding=5,
+                        height=40,
+                        width=140,
+                        menu_height=300,
+                    ),
+                ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Row(ref=fps_custom_row, controls=[
+                    ft.Container(expand=True),
+                    ft.TextField(ref=fps_custom_input, label="Custom FPS", width=120, height=40, text_size=13, border_radius=10, content_padding=5),
+                ], visible=False),
+                # --- Colorspace ---
+                ft.Row([
+                    ft.Column([
+                        ft.Text("Colorspace", weight=ft.FontWeight.W_900, size=14),
+                        ft.Text("Pixel format override", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                    ], expand=True),
+                    ft.Dropdown(
+                        ref=colorspace_dropdown,
+                        label="Format",
+                        value=None,
+                        options=[
+                            ft.DropdownOption(None, "Auto"),
+                            ft.DropdownOption("yuv420p", "YUV 4:2:0 (standard)"),
+                            ft.DropdownOption("yuv422p", "YUV 4:2:2"),
+                            ft.DropdownOption("yuv444p", "YUV 4:4:4"),
+                            ft.DropdownOption("yuv420p10le", "10-bit YUV 4:2:0"),
+                            ft.DropdownOption("gbrp", "RGB (planar)"),
+                        ],
+                        border_radius=10,
+                        text_size=13,
+                        content_padding=5,
+                        height=40,
+                        width=200,
+                        menu_height=300,
+                    ),
+                ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                # --- Audio Filters ---
+                ft.Container(
+                    content=ft.Column([
+                        ft.Text("Audio Filters (Frequencies)", weight=ft.FontWeight.W_900, size=14),
+                        ft.Row([
+                            ft.Text("Highpass (Cut Low):", size=12, color=ft.Colors.ON_SURFACE_VARIANT, width=115),
+                            ft.Slider(ref=audio_highpass_slider, min=0, max=1000, divisions=50, value=0, label="{value} Hz", expand=True),
+                        ]),
+                        ft.Row([
+                            ft.Text("Lowpass (Cut High):", size=12, color=ft.Colors.ON_SURFACE_VARIANT, width=115),
+                            ft.Slider(ref=audio_lowpass_slider, min=5000, max=22050, divisions=100, value=22050, label="{value} Hz", expand=True),
+                        ]),
+                    ], spacing=2),
+                    tooltip="Removes inaudible frequencies to save space. Highpass cuts rumbles/wind (0-200Hz). Lowpass cuts high hissing (14-16kHz)."
+                ),
+                # --- Metadata & Tags ---
+                ft.Container(
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Column([
+                                ft.Text("Strip Metadata", weight=ft.FontWeight.W_900, size=14),
+                                ft.Text("Remove GPS, copyright, title, etc.", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                            ], expand=True),
+                            ft.Switch(ref=strip_metadata_switch, value=False, active_color=ft.Colors.PRIMARY)
+                        ]),
+                        ft.Row([
+                            ft.TextField(ref=meta_title_input, label="Title Tag", text_size=12, expand=True, border_radius=10, height=45),
+                            ft.TextField(ref=meta_author_input, label="Author Tag", text_size=12, expand=True, border_radius=10, height=45),
+                        ], spacing=10),
+                    ], spacing=10),
+                    tooltip="Manage video tags. Strip Metadata wipes everything. Custom tags override existing info."
+                ),
+                ft.Divider(),
+                # --- Performance ---
                 ft.Text("Performance Preset (cpu-used)", size=14, weight=ft.FontWeight.W_900),
                 ft.Container(
                     content=ft.Slider(
@@ -1167,8 +1504,9 @@ async def main(page: ft.Page):
                         tooltip="Distance between full keyframes. Higher improves compression; Lower improves seeking."
                     ),
                 ], spacing=10),
-            ], tight=True, spacing=15),
+            ], tight=True, spacing=15, scroll=ft.ScrollMode.ADAPTIVE),
             width=500,
+            height=560,
             padding=10
         ),
         actions=[
@@ -1319,6 +1657,54 @@ async def main(page: ft.Page):
     )
     page.overlay.append(error_dialog)
 
+    # --- Size Warning Dialog ---
+    size_warn_target_text = ft.Ref[ft.Text]()
+    size_warn_result_text = ft.Ref[ft.Text]()
+
+    size_warn_dialog = ft.AlertDialog(
+        title=ft.Row([
+            ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.AMBER_700, size=32),
+            ft.Text("Couldn't Reach Target Size", weight=ft.FontWeight.W_900, color=ft.Colors.AMBER_700)
+        ], spacing=10),
+        content=ft.Container(
+            content=ft.Column([
+                ft.Text("The compressed file is still larger than your target.", size=14),
+                ft.Text("Try a lower target size, different codec, or lower resolution.", size=13, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Divider(height=15),
+                ft.Container(
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Text("Target Size :", size=14, weight=ft.FontWeight.W_600),
+                            ft.Text("", ref=size_warn_target_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
+                        ], spacing=10),
+                        ft.Row([
+                            ft.Text("Result Size :", size=14, weight=ft.FontWeight.W_600),
+                            ft.Text("", ref=size_warn_result_text, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.ERROR),
+                            ft.Text("(Too big)", size=13, color=ft.Colors.ERROR, italic=True),
+                        ], spacing=10),
+                    ], spacing=12),
+                    bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                    padding=15,
+                    border_radius=10,
+                ),
+            ], tight=True, spacing=8),
+            width=430,
+            padding=10
+        ),
+        actions=[ft.FilledButton("OK", on_click=lambda _: (setattr(size_warn_dialog, "open", False), page.update()))],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
+    page.overlay.append(size_warn_dialog)
+
+    def show_size_warning(target_mb, result_mb):
+        """Display the friendly size-too-big dialog."""
+        if size_warn_target_text.current:
+            size_warn_target_text.current.value = f"{target_mb:.2f} MB"
+        if size_warn_result_text.current:
+            size_warn_result_text.current.value = f"{result_mb:.2f} MB"
+        size_warn_dialog.open = True
+        page.update()
+
     def show_error(error_message, detailed_log="", title="Application Error"):
         """Display error in modal dialog with tab-aware log pickup"""
         nonlocal current_tab
@@ -1356,7 +1742,24 @@ async def main(page: ft.Page):
         nonlocal selected_file_paths, target_output_path, is_compressing
         if not selected_file_paths: return
         
-        try: target_mb = float(target_size_input.current.value)
+        try:
+            target_mb = float(target_size_input.current.value)
+
+            # Resolution params
+            res_mode = res_mode_dropdown.current.value if res_mode_dropdown.current else "auto"
+            res_fixed = None
+            if res_mode == "fixed" and res_fixed_dropdown.current and res_fixed_dropdown.current.value:
+                res_fixed = int(res_fixed_dropdown.current.value)
+            elif res_mode == "custom" and res_width_input.current and res_height_input.current:
+                w = res_width_input.current.value or "1280"
+                h = res_height_input.current.value or "720"
+                res_fixed = f"{w}x{h}"
+
+            res_min_str = res_min_dropdown.current.value if res_min_dropdown.current else None
+            res_max_str = res_max_dropdown.current.value if res_max_dropdown.current else None
+            res_min = int(res_min_str) if res_min_str else None
+            res_max = int(res_max_str) if res_max_str else None
+            res_params = {"mode": res_mode, "fixed": res_fixed, "min": res_min, "max": res_max}
         except:
             log("\n❌ Invalid Target Size.")
             return
@@ -1378,10 +1781,21 @@ async def main(page: ft.Page):
             "two_pass": two_pass_switch.current.value,
             "ten_bit": ten_bit_switch.current.value,
             "denoise": denoise_switch.current.value,
+            "denoise_luma": int(denoise_luma_slider.current.value) if denoise_luma_slider.current else 4,
+            "denoise_chroma": int(denoise_chroma_slider.current.value) if denoise_chroma_slider.current else 3,
+            "denoise_luma_temp": int(denoise_luma_temp_slider.current.value) if denoise_luma_temp_slider.current else 6,
+            "denoise_chroma_temp": int(denoise_chroma_temp_slider.current.value) if denoise_chroma_temp_slider.current else 5,
             "aq": aq_switch.current.value,
             "cpu_used": int(cpu_used_slider.current.value),
-
-            "keyframe": keyframe_input.current.value
+            "keyframe": keyframe_input.current.value,
+            "fps": fps_custom_input.current.value if (fps_dropdown.current and fps_dropdown.current.value == "custom" and fps_custom_input.current) else (fps_dropdown.current.value if fps_dropdown.current else None),
+            "colorspace": colorspace_dropdown.current.value if colorspace_dropdown.current else None,
+            "audio_codec": comp_acodec_dropdown.current.value if comp_acodec_dropdown.current else "aac",
+            "strip_metadata": strip_metadata_switch.current.value if strip_metadata_switch.current else False,
+            "audio_highpass": int(audio_highpass_slider.current.value) if audio_highpass_slider.current else 0,
+            "audio_lowpass": int(audio_lowpass_slider.current.value) if audio_lowpass_slider.current else 22050,
+            "meta_title": meta_title_input.current.value if meta_title_input.current else "",
+            "meta_author": meta_author_input.current.value if meta_author_input.current else "",
         }
 
         if compress_btn.current: compress_btn.current.disabled = True
@@ -1416,6 +1830,7 @@ async def main(page: ft.Page):
         try:
             total_files = len(selected_file_paths)
             successful_count = 0
+            size_warn_shown = False
             
             for idx, input_file in enumerate(selected_file_paths):
                 if stop_event.is_set():
@@ -1441,7 +1856,7 @@ async def main(page: ft.Page):
                 
                 log(f"\n📹 Processing: {os.path.basename(input_file)}")
                 
-                success, final_output = logic.auto_compress(
+                success, final_output, result_size = logic.auto_compress(
                     input_file, 
                     target_mb, 
                     codec, 
@@ -1451,12 +1866,18 @@ async def main(page: ft.Page):
                     stop_event=stop_event,
                     preview_path=preview_file_path if show_preview else None,
                     progress_callback=on_progress,
-                    advanced_params=adv_params
+                    advanced_params=adv_params,
+                    res_params=res_params
                 )
                 
                 if success:
                     successful_count += 1
                     log(f"✅ Saved: {os.path.basename(final_output)}")
+                elif result_size is not None:
+                    # Encoding succeeded but file was still too big
+                    log(f"⚠️ Too big: {os.path.basename(input_file)} ({result_size:.2f} MB > {target_mb:.2f} MB)")
+                    show_size_warning(target_mb, result_size)
+                    size_warn_shown = True
                 else:
                     log(f"❌ Failed: {os.path.basename(input_file)}")
                 
@@ -1482,7 +1903,9 @@ async def main(page: ft.Page):
             else:
                 msg = "❌ FAILED"
                 log(f"\n❌ All compressions failed.")
-                show_error("One or more compression tasks failed. Check the logs below for specific FFmpeg errors.", title="Compression Error")
+                # Only show generic error if a size warning wasn't already shown
+                if not size_warn_shown:
+                    show_error("One or more compression tasks failed. Check the logs below for specific FFmpeg errors.", title="Compression Error")
             
             # Overlay effect
             status_text.current.value = msg
@@ -1707,61 +2130,78 @@ async def main(page: ft.Page):
                 inactive_color=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             ),
             ft.Row([
-                ft.Row([
-                    ft.Dropdown(
-                        ref=codec_dropdown, 
-                        label="Codec", 
-                        width=120, 
-                        options=[
-                            ft.DropdownOption("av1"), 
-                            ft.DropdownOption("h264"), 
-                            ft.DropdownOption("h265"), 
-                            ft.DropdownOption("h266"),
-                            ft.DropdownOption("vp9"),
-                            ft.DropdownOption("vp8"),
-                            ft.DropdownOption("mpeg4"),
-                            ft.DropdownOption("mpeg2"),
-                            ft.DropdownOption("theora"),
-                            ft.DropdownOption("wmv")
-                        ], 
-                        value="av1", 
-                        on_select=on_codec_change,
-                        border_radius=10,
-                        text_size=13,
-                        content_padding=5,
-                        height=40,
-                        menu_height=300
-                    ),
-                    ft.Dropdown(
-                        ref=container_dropdown,
-                        label="Container",
-                        width=110, 
-                        options=[
-                            ft.DropdownOption("mp4"), 
-                            ft.DropdownOption("mkv"), 
-                            ft.DropdownOption("webm"), 
-                            ft.DropdownOption("mov"),
-                            ft.DropdownOption("avi"),
-                            ft.DropdownOption("flv"),
-                            ft.DropdownOption("wmv"),
-                            ft.DropdownOption("ogg")
-                        ],
-                        value="mp4",
-                        on_select=on_container_change,
-                        border_radius=10,
-                        text_size=13,
-                        content_padding=5,
-                        height=40,
-                        menu_height=300
-                    ),
-                ], spacing=10),
-                
-                # GPU toggle removed - now in settings
-                
+                ft.Dropdown(
+                    ref=codec_dropdown, 
+                    label="Video Codec", 
+                    width=110, 
+                    options=[
+                        ft.DropdownOption("av1"), 
+                        ft.DropdownOption("h264"), 
+                        ft.DropdownOption("h265"), 
+                        ft.DropdownOption("h266"),
+                        ft.DropdownOption("vp9"),
+                        ft.DropdownOption("vp8"),
+                        ft.DropdownOption("mpeg4"),
+                        ft.DropdownOption("mpeg2"),
+                        ft.DropdownOption("theora"),
+                        ft.DropdownOption("wmv")
+                    ], 
+                    value="av1", 
+                    on_select=on_codec_change,
+                    border_radius=10,
+                    text_size=12,
+                    content_padding=5,
+                    height=38,
+                    menu_height=300
+                ),
+                ft.Dropdown(
+                    ref=container_dropdown,
+                    label="Container",
+                    width=100, 
+                    options=[
+                        ft.DropdownOption("mp4"), 
+                        ft.DropdownOption("mkv"), 
+                        ft.DropdownOption("webm"), 
+                        ft.DropdownOption("mov"),
+                        ft.DropdownOption("avi"),
+                        ft.DropdownOption("flv"),
+                        ft.DropdownOption("wmv"),
+                        ft.DropdownOption("ogg")
+                    ],
+                    value="mp4",
+                    on_select=on_container_change,
+                    border_radius=10,
+                    text_size=12,
+                    content_padding=5,
+                    height=38,
+                    menu_height=300
+                ),
+                ft.Dropdown(
+                    ref=comp_acodec_dropdown,
+                    label="Audio Codec",
+                    width=120,
+                    value="aac",
+                    options=[
+                        ft.DropdownOption("aac", "AAC"),
+                        ft.DropdownOption("libopus", "Opus"),
+                        ft.DropdownOption("libmp3lame", "MP3"),
+                        ft.DropdownOption("libvorbis", "Vorbis"),
+                        ft.DropdownOption("ac3", "AC3"),
+                        ft.DropdownOption("eac3", "E-AC3"),
+                        ft.DropdownOption("pcm_s16le", "PCM"),
+                        ft.DropdownOption("flac", "FLAC"),
+                        ft.DropdownOption("copy", "Copy"),
+                    ],
+                    border_radius=10,
+                    text_size=12,
+                    content_padding=5,
+                    height=38,
+                    menu_height=300,
+                ),
                 ft.Row([
                     ft.Icon(ft.Icons.REMOVE_RED_EYE_OUTLINED, size=18, color=ft.Colors.ON_SURFACE_VARIANT),
                     ft.Text("Preview", color=ft.Colors.ON_SURFACE_VARIANT, size=13),
-                    ft.Switch(ref=preview_switch, value=False, on_change=on_preview_toggle, active_color=ft.Colors.PRIMARY, scale=0.8)
+                    ft.Switch(ref=preview_switch, value=False, on_change=on_preview_toggle, active_color=ft.Colors.PRIMARY, scale=0.7)
                 ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.CENTER),
 
                 ft.Container(expand=True, bgcolor=ft.Colors.TRANSPARENT), # Invisible spacer
@@ -1771,7 +2211,7 @@ async def main(page: ft.Page):
                     on_click=lambda _: (setattr(advanced_dialog, "open", True), page.update()),
                     style=ft.ButtonStyle(color=ft.Colors.PRIMARY, padding=5)
                 )
-            ], alignment=ft.MainAxisAlignment.START, spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER, wrap=False)
+            ], alignment=ft.MainAxisAlignment.START, spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER, wrap=False),
         ], spacing=5), 
         padding=10,
         bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
@@ -2239,8 +2679,13 @@ async def main(page: ft.Page):
                     label="Format", 
                     width=110, 
                     options=[
-                        ft.DropdownOption("mp4"), ft.DropdownOption("mkv"), 
-                        ft.DropdownOption("mp3"), ft.DropdownOption("wav"), 
+                        ft.DropdownOption("mp4"),  ft.DropdownOption("mkv"),
+                        ft.DropdownOption("webm"), ft.DropdownOption("avi"),
+                        ft.DropdownOption("mov"),  ft.DropdownOption("ts"),
+                        ft.DropdownOption("flv"),
+                        ft.DropdownOption("mp3"),  ft.DropdownOption("aac"),
+                        ft.DropdownOption("opus"), ft.DropdownOption("ogg"),
+                        ft.DropdownOption("m4a"),  ft.DropdownOption("wav"),
                         ft.DropdownOption("flac"), ft.DropdownOption("gif"),
                         ft.DropdownOption("webp")
                     ], 
@@ -2255,33 +2700,51 @@ async def main(page: ft.Page):
                 ft.Dropdown(
                     ref=conv_vcodec_dropdown, 
                     label="Video Codec", 
-                    width=120, 
+                    width=130, 
                     options=[
-                        ft.DropdownOption("copy"), ft.DropdownOption("libx264"), 
-                        ft.DropdownOption("libx265"), ft.DropdownOption("libsvtav1")
+                        ft.DropdownOption("copy"),
+                        ft.DropdownOption("libx264", "H.264 (x264)"),
+                        ft.DropdownOption("libx265", "H.265 (x265)"),
+                        ft.DropdownOption("libsvtav1", "AV1 (SVT)"),
+                        ft.DropdownOption("libvpx-vp9", "VP9"),
+                        ft.DropdownOption("libvpx", "VP8"),
+                        ft.DropdownOption("libtheora", "Theora"),
+                        ft.DropdownOption("prores", "ProRes"),
+                        ft.DropdownOption("dnxhd", "DNxHD"),
+                        ft.DropdownOption("mpeg4", "MPEG-4"),
+                        ft.DropdownOption("mpeg2video", "MPEG-2"),
                     ], 
                     value="libx264", 
                     border_radius=10, 
                     text_size=13,
                     content_padding=5,
                     height=40,
-                    menu_height=300
+                    menu_height=400
                 ),
                 ft.Dropdown(
                     ref=conv_acodec_dropdown, 
                     label="Audio Codec", 
-                    width=120, 
+                    width=130, 
                     options=[
-                        ft.DropdownOption("copy"), ft.DropdownOption("aac"), 
-                        ft.DropdownOption("libmp3lame"), ft.DropdownOption("libopus"), 
-                        ft.DropdownOption("pcm_s16le"), ft.DropdownOption("flac")
+                        ft.DropdownOption("copy"),
+                        ft.DropdownOption("aac", "AAC"),
+                        ft.DropdownOption("libmp3lame", "MP3"),
+                        ft.DropdownOption("libopus", "Opus"),
+                        ft.DropdownOption("libvorbis", "Vorbis"),
+                        ft.DropdownOption("pcm_s16le", "PCM 16-bit"),
+                        ft.DropdownOption("pcm_s24le", "PCM 24-bit"),
+                        ft.DropdownOption("flac", "FLAC"),
+                        ft.DropdownOption("alac", "ALAC (Apple)"),
+                        ft.DropdownOption("ac3", "AC3 (Dolby)"),
+                        ft.DropdownOption("eac3", "E-AC3"),
+                        ft.DropdownOption("wmav2", "WMA"),
                     ], 
                     value="aac", 
                     border_radius=10, 
                     text_size=13,
                     content_padding=5,
                     height=40,
-                    menu_height=300
+                    menu_height=400
                 ),
                 ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
                 ft.Icon(ft.Icons.REMOVE_RED_EYE_OUTLINED, size=18, color=ft.Colors.ON_SURFACE_VARIANT),
@@ -4371,7 +4834,7 @@ async def main(page: ft.Page):
                     ft.Container(
                         content=ft.Column([
                             ft.Icon(ft.Icons.AUDIOTRACK_ROUNDED, size=30, color=ft.Colors.PRIMARY),
-                            ft.Text("Audio Utilities", size=14, weight=ft.FontWeight.W_600),
+                            ft.Text("Audio Tools", size=14, weight=ft.FontWeight.W_600),
                         ], alignment=ft.MainAxisAlignment.CENTER, spacing=5, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                         width=150,
                         height=100,
@@ -4438,9 +4901,8 @@ async def main(page: ft.Page):
         page.theme_mode = ft.ThemeMode.DARK if is_dark else ft.ThemeMode.LIGHT
         user_settings["theme_mode"] = "dark" if is_dark else "light"
         
-        # Reset color seed based on standard or custom
-        curr_accent = user_settings.get("accent_color", "INDIGO_ACCENT")
-        page.theme.color_scheme_seed = getattr(ft.Colors, curr_accent, ft.Colors.INDIGO_ACCENT)
+        # Reset color seed using the robust logic
+        set_accent_color(user_settings.get("accent_color", "INDIGO_ACCENT"))
         
         save_settings(user_settings)
         page.update()
@@ -4468,14 +4930,27 @@ async def main(page: ft.Page):
                     page.theme_mode = ft.ThemeMode.DARK if is_manual_dark else ft.ThemeMode.LIGHT
                     setting_theme_switch.current.value = is_manual_dark
                 setting_theme_switch.current.update()
+        elif key == "transparent_app":
+            apply_transparency()
         page.update()
 
     def set_accent_color(color_name):
         user_settings["accent_color"] = color_name
-        if color_name.startswith("#") or color_name == "FLUORESCENT_GREEN":
-            page.theme.color_scheme_seed = "#00FF00" if color_name == "FLUORESCENT_GREEN" else color_name
+        
+        # Custom hex mappings
+        custom_colors = {
+            "PINK": "#FF2D55",
+            "RED": "#FF0000",
+            "FLUORESCENT_GREEN": "#00FF00"
+        }
+        
+        if color_name in custom_colors:
+            page.theme.color_scheme_seed = custom_colors[color_name]
+        elif color_name.startswith("#"):
+            page.theme.color_scheme_seed = color_name
         else:
             page.theme.color_scheme_seed = getattr(ft.Colors, color_name, ft.Colors.INDIGO_ACCENT)
+            
         save_settings(user_settings)
         page.update()
 
@@ -4484,6 +4959,81 @@ async def main(page: ft.Page):
     setting_ding_switch = ft.Switch(value=user_settings.get("play_ding", True), on_change=lambda e: toggle_setting("play_ding", e), active_color=ft.Colors.PRIMARY)
     setting_gpu_switch = ft.Switch(value=user_settings.get("use_gpu", True), on_change=lambda e: toggle_setting("use_gpu", e), active_color=ft.Colors.PRIMARY)
     setting_os_theme_switch = ft.Switch(value=user_settings.get("follow_os_theme", False), on_change=lambda e: toggle_setting("follow_os_theme", e), active_color=ft.Colors.PRIMARY)
+    setting_transparent_switch = ft.Switch(
+        value=user_settings.get("transparent_app", False), 
+        on_change=lambda e: toggle_setting("transparent_app", e), 
+        active_color=ft.Colors.PRIMARY,
+        disabled=(sys.platform != "win32")
+    )
+    
+    custom_font_field = ft.TextField(
+        value=user_settings.get("custom_font_path", ""),
+        label="Custom Font Path (.ttf/.otf)",
+        expand=True,
+        border_radius=10,
+        text_size=13,
+        height=45,
+    )
+    
+    system_font_dropdown = ft.Dropdown(
+        label="System Select",
+        value=user_settings.get("custom_font_family", "System Default"),
+        expand=True,
+        border_radius=10,
+        text_size=13,
+        height=45,
+        options=[ft.DropdownOption(f) for f in get_system_fonts()],
+        on_select=lambda e: apply_custom_font(from_dropdown=True)
+    )
+    
+    def apply_custom_font(e=None, from_dropdown=False):
+        if from_dropdown:
+            family = system_font_dropdown.value
+            if not family or family == "System Default":
+                # Check if comic sans is active, otherwise hit default
+                page.theme.font_family = "Comic Neue" if user_settings.get("comic_sans_active") else "Roboto Flex"
+                user_settings["custom_font_family"] = "System Default"
+            else:
+                page.theme.font_family = family
+                user_settings["custom_font_family"] = family
+                # Clear path if selecting from system list to avoid confusion
+                custom_font_field.value = ""
+                user_settings["custom_font_path"] = ""
+            
+            save_settings(user_settings)
+            page.update()
+            log(f"✅ Applied font: {family}")
+        else:
+            path = custom_font_field.value
+            if not path: return
+            try:
+                # Register font
+                font_name = "UserCustomFont"
+                page.fonts[font_name] = path
+                page.theme.font_family = font_name
+                user_settings["custom_font_path"] = path
+                user_settings["custom_font_family"] = "" # Reset dropdown
+                system_font_dropdown.value = "System Default"
+                save_settings(user_settings)
+                page.update()
+                log(f"✅ Applied custom font file: {os.path.basename(path)}")
+            except Exception as ex:
+                log(f"❌ Failed to load font: {ex}")
+                show_error(f"Could not load custom font: {ex}")
+
+    def pick_custom_font(e):
+        def on_pick(res: ft.FilePickerResultEvent):
+            if res.files:
+                custom_font_field.value = res.files[0].path
+                custom_font_field.update()
+                apply_custom_font()
+        
+        picker = ft.FilePicker(on_result=on_pick)
+        page.overlay.append(picker)
+        page.update()
+        picker.pick_files(allowed_extensions=["ttf", "otf"])
+
+    setting_logs_switch = ft.Switch(value=user_settings.get("show_logs", False), on_change=lambda e: toggle_setting("show_logs", e), active_color=ft.Colors.PRIMARY)
 
     def color_dot(color_name, real_color):
         return ft.Container(
@@ -4517,7 +5067,42 @@ async def main(page: ft.Page):
                                 ], spacing=15),
                                 setting_os_theme_switch
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+
                             ft.Row([
+                                ft.Row([
+                                    ft.Icon(ft.Icons.OPACITY_ROUNDED, size=20),
+                                    ft.Column([
+                                        ft.Text("Transparent App", size=16, weight=ft.FontWeight.W_600),
+                                        ft.Text(
+                                            "Make the background transparent and blur it." if sys.platform == "win32" else "Unavailable on Linux until fix found", 
+                                            size=12, 
+                                            color=ft.Colors.ON_SURFACE_VARIANT
+                                        ),
+                                    ], spacing=0),
+                                ], spacing=15),
+                                setting_transparent_switch
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+
+                            ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+                            
+                            ft.Column([
+                               ft.Row([
+                                   ft.Icon(ft.Icons.FONT_DOWNLOAD_ROUNDED, size=20),
+                                   ft.Text("Custom Font", size=16, weight=ft.FontWeight.W_600),
+                               ], spacing=15),
+                               ft.Row([
+                                   custom_font_field,
+                                   ft.IconButton(ft.Icons.FOLDER_OPEN_ROUNDED, on_click=pick_custom_font, tooltip="Browse for .ttf/.otf"),
+                                   ft.IconButton(ft.Icons.CHECK_CIRCLE_ROUNDED, on_click=apply_custom_font, tooltip="Apply Font", icon_color=ft.Colors.PRIMARY),
+                               ], spacing=10),
+                               ft.Row([
+                                   system_font_dropdown,
+                               ], spacing=10),
+                               ft.Text("Restart the app if UI elements look misaligned after font change.", size=11, color=ft.Colors.ON_SURFACE_VARIANT, italic=True),
+                            ], spacing=10),
+
+                            ft.Row([
+
                                 ft.Row([
                                     ft.Icon(ft.Icons.DARK_MODE_ROUNDED, size=20),
                                     ft.Column([
@@ -4538,6 +5123,8 @@ async def main(page: ft.Page):
                                 color_dot("LIME", ft.Colors.LIME),
                                 color_dot("AMBER", ft.Colors.AMBER),
                                 color_dot("ORANGE", ft.Colors.ORANGE),
+                                color_dot("RED", "#FF0000"),
+                                color_dot("PINK", "#FF2D55"),
                             ], spacing=10),
                         ]),
                         padding=20, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST, border_radius=15,
@@ -4604,7 +5191,7 @@ async def main(page: ft.Page):
                 ], spacing=10),
                 
                 ft.Container(expand=True),
-            ], spacing=25),
+            ], spacing=25, scroll=ft.ScrollMode.ADAPTIVE),
             padding=30, expand=True
         )
     ], visible=True, expand=True, offset=ft.Offset(5, 0), animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT_EXPO))
@@ -4871,8 +5458,8 @@ async def main(page: ft.Page):
         )
     )
 
-    page.add(
-        ft.Column([
+    main_layout_container = ft.Container(
+        content=ft.Column([
             title_bar,
             ft.Container(
                 content=ft.Column([
@@ -4902,8 +5489,59 @@ async def main(page: ft.Page):
                 expand=True,
                 padding=15
             )
-        ], expand=True, spacing=0)
+        ], expand=True, spacing=0),
+        expand=True
     )
+    
+    def apply_transparency():
+        if sys.platform != "win32":
+            return
+            
+        if user_settings.get("transparent_app", False):
+            try:
+                page.window.bgcolor = "transparent"
+                page.window.frameless = True
+            except AttributeError:
+                page.window_bgcolor = "transparent"
+                page.window_frameless = True
+            
+            page.bgcolor = "transparent"
+            
+            # Match the working test aesthetic
+            main_layout_container.bgcolor = "#263238" # blueGrey900
+            main_layout_container.opacity = 0.85
+            main_layout_container.border_radius = 20
+            main_layout_container.border = ft.Border.all(1, "white24")
+            main_layout_container.shadow = ft.BoxShadow(
+                spread_radius=1,
+                blur_radius=15,
+                color="black54",
+                offset=ft.Offset(0, 0),
+            )
+            
+            # Ensure title bar matches
+            try:
+                title_bar.content.bgcolor = ft.Colors.TRANSPARENT # Overlay on the container
+            except: pass
+            
+            main_layout_container.blur = None # Test script didn't use blur, used opacity
+        else:
+            page.window.bgcolor = ft.Colors.SURFACE
+            page.bgcolor = ft.Colors.SURFACE
+            main_layout_container.bgcolor = None
+            main_layout_container.opacity = 1.0
+            main_layout_container.border_radius = 0
+            main_layout_container.border = None
+            main_layout_container.shadow = None
+            main_layout_container.blur = None
+            try:
+                title_bar.content.bgcolor = ft.Colors.SURFACE_CONTAINER_LOW
+            except: pass
+
+
+    apply_transparency()
+
+    page.add(main_layout_container)
 
     # Initialize first tab
     set_tab("compressor")

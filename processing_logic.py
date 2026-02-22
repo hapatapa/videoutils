@@ -240,7 +240,14 @@ def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, lo
     if 'vaapi' in v_enc:
         hw_init = ['-vaapi_device', '/dev/dri/renderD128']
 
-    v_filter = f"scale=-2:{res},format=yuv420p"
+    if isinstance(res, str) and "x" in res:
+        try:
+            w, h = res.lower().split("x")
+            v_filter = f"scale={w}:{h},format=yuv420p"
+        except:
+            v_filter = f"scale=-2:{res},format=yuv420p"
+    else:
+        v_filter = f"scale=-2:{res},format=yuv420p"
     
     if v_enc == "h261":
         h261_res = 288 if res >= 288 else 144
@@ -256,12 +263,26 @@ def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, lo
         v_filter = f"scale=-2:{res},format=yuv420p"
 
     if advanced_params and advanced_params.get("denoise"):
-        v_filter += ",hqdn3d=2:2:7:7"
+        ls = advanced_params.get("denoise_luma", 4)
+        cs = advanced_params.get("denoise_chroma", 3)
+        lt = advanced_params.get("denoise_luma_temp", ls*1.5)
+        ct = advanced_params.get("denoise_chroma_temp", cs*1.5)
+        # hqdn3d=luma_spatial:chroma_spatial:luma_temporal:chroma_temporal
+        v_filter += f",hqdn3d={ls}:{cs}:{lt}:{ct}"
 
     ten_bit = advanced_params.get("ten_bit") if advanced_params else False
+    override_colorspace = advanced_params.get("colorspace") if advanced_params else None
 
-    if ten_bit:
+    if override_colorspace:
+        # If user explicitly chose a colorspace, replace the default format
+        v_filter = re.sub(r"format=\S+?", f"format={override_colorspace}", v_filter, count=1)
+    elif ten_bit:
         v_filter = v_filter.replace("format=yuv420p", "format=yuv420p10le")
+    
+    # Frame rate
+    fps_value = advanced_params.get("fps") if advanced_params else None
+    if fps_value:
+        v_filter += f",fps={fps_value}"
         
     if 'vaapi' in v_enc:
         fmt = "p010" if ten_bit else "nv12"
@@ -296,9 +317,28 @@ def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, lo
     if 'nvenc' in v_enc:
         enc_args.extend(['-preset', 'p7', '-tune', 'hq'])
     
-    audio_args = ['-c:a', 'aac', '-b:a', '64k']
-    if advanced_params and codec == "av1":
+    audio_codec_choice = advanced_params.get("audio_codec", "aac") if advanced_params else "aac"
+    if not audio_codec_choice:
+        audio_codec_choice = "aac"
+
+    audio_args = ['-c:a', audio_codec_choice, '-b:a', '64k']
+    if audio_codec_choice == "libopus":
         audio_args = ['-c:a', 'libopus', '-b:a', '48k', '-vbr', 'on', '-frame_duration', '60']
+    elif audio_codec_choice == "copy":
+        audio_args = ['-c:a', 'copy']
+    elif audio_codec_choice in ("pcm_s16le", "pcm_s24le", "flac", "alac"):
+        audio_args = ['-c:a', audio_codec_choice]  # lossless, no bitrate arg
+
+    # --- Audio Filters ---
+    audio_filters = []
+    hp = advanced_params.get("audio_highpass", 0) if advanced_params else 0
+    lp = advanced_params.get("audio_lowpass", 22050) if advanced_params else 22050
+    if hp > 0: audio_filters.append(f"highpass=f={hp}")
+    if lp < 22050: audio_filters.append(f"lowpass=f={lp}")
+    
+    a_filter_args = []
+    if audio_filters:
+        a_filter_args = ['-af', ",".join(audio_filters)]
 
     legacy_encoders = ['h261', 'h263', 'roqvideo', 'snow', 'cinepak', 'msmpeg4v2', 'libxvid', 'flv', 'smc', 'wmv3']
     is_legacy = any(le in v_enc for le in legacy_encoders)
@@ -330,10 +370,20 @@ def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, lo
                 except: pass
                 return False
             
+            strip_meta = advanced_params.get("strip_metadata", False) if advanced_params else False
+            meta_args = ['-map_metadata', '-1'] if strip_meta else []
+            
+            # Custom Metadata
+            if not strip_meta and advanced_params:
+                m_title = advanced_params.get("meta_title", "")
+                m_author = advanced_params.get("meta_author", "")
+                if m_title: meta_args += ['-metadata', f"title={m_title}"]
+                if m_author: meta_args += ['-metadata', f"author={m_author}", '-metadata', f"artist={m_author}"]
+
             if p == 0:
                 log_func(f"Encoding...", replace_last=True)
                 cur_cmd = ['ffmpeg', '-y', '-hide_banner', '-stats'] + hw_init + ['-i', input_file] + \
-                          ['-vf', v_filter] + enc_args + audio_args + [output_file]
+                          ['-vf', v_filter] + enc_args + audio_args + a_filter_args + meta_args + [output_file]
             elif p == 1:
                 log_func(f"Starting Pass 1...", replace_last=True)
                 cur_cmd = ['ffmpeg', '-y', '-hide_banner', '-stats'] + hw_init + ['-i', input_file] + \
@@ -341,7 +391,7 @@ def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, lo
             else:
                 log_func(f"Starting Pass 2...", replace_last=True)
                 cur_cmd = ['ffmpeg', '-y', '-hide_banner', '-stats'] + hw_init + ['-i', input_file] + \
-                          ['-vf', v_filter] + enc_args + ['-pass', '2'] + audio_args + [output_file]
+                          ['-vf', v_filter] + enc_args + ['-pass', '2'] + audio_args + a_filter_args + meta_args + [output_file]
 
             process = subprocess.Popen(
                 cur_cmd,
@@ -428,7 +478,7 @@ def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, lo
         log_func(f"❌ Error: {e}")
         return False
 
-def auto_compress(input_file, target_mb, codec, use_gpu, output_file=None, log_func=print, stop_event=None, preview_path=None, progress_callback=None, advanced_params=None):
+def auto_compress(input_file, target_mb, codec, use_gpu, output_file=None, log_func=print, stop_event=None, preview_path=None, progress_callback=None, advanced_params=None, res_params=None):
     legacy_codecs = ["libxvid", "msmpeg4v2", "flv1", "h261", "h263", "snow", "cinepak", "roq", "smc", "vc1"]
     
     if not output_file:
@@ -447,7 +497,29 @@ def auto_compress(input_file, target_mb, codec, use_gpu, output_file=None, log_f
         log_func(msg, replace_last=replace_last)
         last_msg = msg
 
-    for res in [1440, 1080, 720, 480, 360]:
+    # Build the resolution list to attempt based on res_params
+    res_params = res_params or {}
+    res_mode = res_params.get("mode", "auto")
+    
+    if res_mode == "custom":
+        res_list = [res_params.get("fixed", "1280x720")]
+    elif res_mode == "fixed":
+        # Use a single fixed resolution — no fallback scaling
+        fixed_res = res_params.get("fixed", 1080)
+        res_list = [fixed_res]
+    else:
+        # Auto: use progressive scale-down list, bounded by min/max
+        all_res = [2160, 1440, 1080, 720, 480, 360, 240]
+        res_max = res_params.get("max")
+        res_min = res_params.get("min")
+        res_list = [r for r in all_res if (res_max is None or r <= res_max) and (res_min is None or r >= res_min)]
+        if not res_list:
+            # Fallback if user set an impossible range
+            res_list = [1080, 720, 480, 360]
+
+    last_result_size = None  # Tracks most recent output size (for "too big" detection)
+
+    for res in res_list:
         if stop_event and stop_event.is_set(): break
 
         success = compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, smart_log, stop_event, preview_path, progress_callback, advanced_params)
@@ -464,15 +536,22 @@ def auto_compress(input_file, target_mb, codec, use_gpu, output_file=None, log_f
                     subprocess.run(['kitten', 'notify', 'Compression Done', f"{res}p {codec} finished"], stderr=subprocess.DEVNULL, creationflags=SUBPROCESS_FLAGS)
                 try: os.remove(preview_path) if preview_path and os.path.exists(preview_path) else None
                 except: pass
-                return True, output_file
+                return True, output_file, None
             else:
+                last_result_size = final_size
+                if res_mode == "fixed":
+                    # In fixed mode there's only one attempt, report size and stop
+                    smart_log(f"⚠️ Result too large ({final_size:.2f} MB). Fixed resolution mode — no fallback.")
+                    break
                 smart_log(f"⚠️ Result too large ({final_size:.2f}MB). Trying lower resolution...")
         elif not (stop_event and stop_event.is_set()):
             smart_log(f"❌ Encoding failed at {res}p. Skipping...")
     
     try: os.remove(preview_path) if preview_path and os.path.exists(preview_path) else None
     except: pass
-    return False, None
+    
+    # If last_result_size is set it means encoding succeeded but was too large — return it for the UI
+    return False, None, last_result_size
 
 def simple_convert(input_file, output_file, vcodec, acodec, log_func=print, progress_callback=None):
     try:

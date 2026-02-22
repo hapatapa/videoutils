@@ -24,5 +24,6 @@ fi
 
 # 4. Run the GUI application using the venv python
 # echo "Starting Video Compressor GUI..."
+export FLET_VIEW_TRANSPARENT=true
 "$VENV_DIR/bin/python" main.py
 
