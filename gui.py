@@ -194,10 +194,10 @@ DEFAULT_SETTINGS = {
     "play_ding": True,
     "show_logs": False,
     "use_gpu": True,
-    "follow_os_theme": False,
+    "follow_os_theme": True,
     "comic_sans_unlocked": False,
     "comic_sans_active": False,
-    "transparent_app": False,
+    "transparent_app": True,
     "custom_font_path": "",
     "custom_font_family": ""
 }
