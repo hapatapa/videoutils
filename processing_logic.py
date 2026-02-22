@@ -240,17 +240,22 @@ def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, lo
     if 'vaapi' in v_enc:
         hw_init = ['-vaapi_device', '/dev/dri/renderD128']
 
-    if isinstance(res, str) and "x" in res:
+    if isinstance(res, str) and "x" in res.lower():
         try:
             w, h = res.lower().split("x")
             v_filter = f"scale={w}:{h},format=yuv420p"
+            # For hardware acceleration paths that need a numeric height fallback, 
+            # we'll keep a 'base_res' int as well.
+            base_res = int(h) if h.isdigit() else 720
         except:
             v_filter = f"scale=-2:{res},format=yuv420p"
+            base_res = int(res) if isinstance(res, int) else 720
     else:
         v_filter = f"scale=-2:{res},format=yuv420p"
-    
+        base_res = res
+
     if v_enc == "h261":
-        h261_res = 288 if res >= 288 else 144
+        h261_res = 288 if base_res >= 288 else 144
         w261 = 352 if h261_res == 288 else 176
         v_filter = f"scale={w261}:{h261_res},format=yuv420p,fps=30000/1001"
     elif v_enc == "roqvideo":
@@ -260,7 +265,7 @@ def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, lo
     elif v_enc == "cinepak":
         v_filter = f"scale='bitand(iw, -4)':'bitand(ih, -4)',format=yuv420p,fps=30"
     elif v_enc == "snow":
-        v_filter = f"scale=-2:{res},format=yuv420p"
+        v_filter = f"scale=-2:{base_res},format=yuv420p"
 
     if advanced_params and advanced_params.get("denoise"):
         ls = advanced_params.get("denoise_luma", 4)
@@ -289,7 +294,7 @@ def compress_attempt(input_file, output_file, target_mb, res, codec, use_gpu, lo
         base_filter = ""
         if advanced_params and advanced_params.get("denoise"):
             base_filter = "hqdn3d=2:2:7:7,"
-        v_filter = f"{base_filter}format={fmt},hwupload,scale_vaapi=w=-2:h={res}"
+        v_filter = f"{base_filter}format={fmt},hwupload,scale_vaapi=w=-2:h={base_res}"
     
     enc_args = ['-c:v', v_enc, '-b:v', f"{video_kbps}k"]
     

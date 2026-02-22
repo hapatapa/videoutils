@@ -85,7 +85,8 @@ jobs:
       - name: Package Linux (Self-Extracting Run)
         run: |
           EXE_NAME=$(find build/linux -maxdepth 1 -executable -type f -not -name "*.so*" -not -name "flet" | head -n 1 | xargs basename)
-          makeself build/linux VideoUtilities-Linux.run "Video Utilities" ./"$EXE_NAME"
+          # Use env to pass the value of $0 (the run file path) to the app
+          makeself build/linux VideoUtilities-Linux.run "Video Utilities" env MAKESELF_PATH="\$0" ./"$EXE_NAME"
       - name: Archive Linux Native
         run: |
           tar -czf VideoUtilities-Linux-Native.tar.gz -C build/linux .

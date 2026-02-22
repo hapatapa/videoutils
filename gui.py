@@ -111,18 +111,26 @@ class UpdateManager:
             return
             
         current_exe = sys.executable
+        # Check if we have the original .run path from makeself (passed via build wrapper)
+        makeself_path = os.environ.get("MAKESELF_PATH")
+        is_using_makeself = makeself_path and os.path.exists(makeself_path)
+        
+        if is_using_makeself:
+            current_exe = makeself_path
+            
         new_asset = self.download_path
         sys_name = platform.system()
         
-        # Handle formats that can't be auto-replaced easily (folders or temp-extracted .run files)
+        # Handle formats that can't be auto-replaced easily (folders/tarballs)
         if sys_name == "Linux":
-            is_tar = new_asset.endswith(".tar.gz")
-            is_in_tmp = current_exe.startswith("/tmp") or "/tmp/" in current_exe or "/.mount_" in current_exe
-            
-            if is_tar or is_in_tmp:
-                # Open the folder where it was downloaded so the user can manually update
+            if new_asset.endswith(".tar.gz"):
                 open_folder(new_asset)
-                # Don't exit yet, let the user close it after seeing the folder
+                return
+            
+            # If we're in /tmp but DON'T have a MAKESELF_PATH, we can't auto-replace
+            is_in_tmp = current_exe.startswith("/tmp") or "/tmp/" in current_exe or "/.mount_" in current_exe
+            if is_in_tmp and not is_using_makeself:
+                open_folder(new_asset)
                 return
 
         if sys_name == "Windows":
@@ -146,6 +154,8 @@ class UpdateManager:
                 f.write(f"sleep 2\n")
                 f.write(f"mv -f \"{new_asset}\" \"{current_exe}\"\n")
                 f.write(f"chmod +x \"{current_exe}\"\n")
+                # For makeself, we don't necessarily want to relaunch the *installer* 
+                # but in most cases, it's what the user wants to see next.
                 f.write(f"\"{current_exe}\" &\n")
                 f.write(f"rm \"$0\"\n")
             os.chmod(sh_path, 0o755)
@@ -668,7 +678,8 @@ async def main(page: ft.Page):
             is_manual = False
             if platform.system() == "Linux":
                 is_manual = update_manager.download_path.endswith(".tar.gz") or \
-                            current_exe.startswith("/tmp") or "/tmp/" in current_exe or "/.mount_" in current_exe
+                            ((current_exe.startswith("/tmp") or "/tmp/" in current_exe or "/.mount_" in current_exe) 
+                             and not os.environ.get("MAKESELF_PATH"))
 
             # Show a modal prompt
             restart_modal = ft.AlertDialog(
