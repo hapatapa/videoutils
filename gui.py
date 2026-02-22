@@ -5834,56 +5834,43 @@ async def main(page: ft.Page):
     def apply_transparency():
         if user_settings.get("transparent_app", False):
             try:
-                page.window.bgcolor = "transparent"
+                page.window.bgcolor = ft.Colors.TRANSPARENT
                 page.window.frameless = True
-            except AttributeError:
-                page.window_bgcolor = "transparent"
+            except:
+                page.window_bgcolor = ft.Colors.TRANSPARENT
                 page.window_frameless = True
             
-            page.bgcolor = "transparent"
+            page.bgcolor = ft.Colors.TRANSPARENT
             
             # Get current accent for tint
             accent = page.theme.color_scheme_seed or ft.Colors.INDIGO_ACCENT
             
-            # Aggressive Transparency Pass
-            try:
-                # Use a specific almost-transparent hex to 'wake up' the compositor
-                page.window.bgcolor = "#01000000" 
-                page.window.frameless = True
-            except AttributeError:
-                page.window_bgcolor = "#01000000"
-                page.window_frameless = True
-            
-            page.bgcolor = "transparent"
-            
-            # Get current accent for tint
-            accent = page.theme.color_scheme_seed or ft.Colors.INDIGO_ACCENT
-            
-            # 1. Deep Tint Foundation
+            # 1. Tint Layer (Fundamental color base)
             tint_layer.visible = True
-            tint_layer.bgcolor = ft.Colors.with_opacity(0.4, accent) 
+            tint_layer.bgcolor = ft.Colors.with_opacity(0.3, accent)
             tint_layer.border_radius = 20
             
-            # 2. Hyper-Frost Sheet
+            # 2. Glass Layer (Wrapper for UI, carries the Blur)
+            # The blur is a backdrop filter, so it blurs the tint_layer and desktop
             glass_blur_layer.visible = True
-            glass_blur_layer.bgcolor = ft.Colors.with_opacity(0.2, ft.Colors.WHITE) # Heavier frost ink
-            glass_blur_layer.blur = ft.Blur(sigma_x=60, sigma_y=60, tile_mode=ft.BlurTileMode.REPEATED)
+            glass_blur_layer.bgcolor = ft.Colors.with_opacity(0.1, ft.Colors.WHITE) # Catch the blur
+            glass_blur_layer.blur = ft.Blur(25, 25, ft.BlurTileMode.MIRROR)
             glass_blur_layer.border_radius = 20
-            glass_blur_layer.border = ft.Border.all(2, ft.Colors.with_opacity(0.2, ft.Colors.WHITE))
+            glass_blur_layer.border = ft.Border.all(1, ft.Colors.with_opacity(0.2, ft.Colors.WHITE))
             
-            # 3. App container shadow to make the glass pop
+            # Root container styling
             main_layout_container.bgcolor = ft.Colors.TRANSPARENT
             main_layout_container.border_radius = 20
             main_layout_container.shadow = ft.BoxShadow(
-                spread_radius=2,
-                blur_radius=30,
-                color="black54",
+                spread_radius=1,
+                blur_radius=20,
+                color="black38",
                 offset=ft.Offset(0, 0),
             )
             
-            # Ensure title bar matches
+            # Title bar adjustment
             try:
-                title_bar.content.bgcolor = ft.Colors.with_opacity(0.1, ft.Colors.BLACK)
+                title_bar.content.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.BLACK)
             except: pass
         else:
             try:
@@ -5893,13 +5880,17 @@ async def main(page: ft.Page):
                 
             page.bgcolor = ft.Colors.SURFACE
             tint_layer.visible = False
-            glass_blur_layer.visible = False
+            glass_blur_layer.visible = True
+            glass_blur_layer.blur = None
+            glass_blur_layer.bgcolor = None
+            glass_blur_layer.border = None
             main_layout_container.bgcolor = ft.Colors.SURFACE
             main_layout_container.border_radius = 0
             main_layout_container.shadow = None
             try:
                 title_bar.content.bgcolor = ft.Colors.SURFACE_CONTAINER_LOW
             except: pass
+
 
 
 
