@@ -5837,15 +5837,17 @@ async def main(page: ft.Page):
             # Get current accent for tint
             accent = page.theme.color_scheme_seed or ft.Colors.INDIGO_ACCENT
             
-            # Show and style the sandwich: tint first, then blur OVER it
+            # Show and style the sandwich: [Tint Base] -> [Blurred Glass Sheet] -> [UI]
             tint_layer.visible = True
-            tint_layer.bgcolor = ft.Colors.with_opacity(0.18, accent)
+            tint_layer.bgcolor = ft.Colors.with_opacity(0.22, accent)
             tint_layer.border_radius = 20
             
+            # The Glass Sheet: Must have a color for the blur to have something to process
             glass_blur_layer.visible = True
-            glass_blur_layer.blur = ft.Blur(25, 25, ft.BlurTileMode.REPEATED)
+            glass_blur_layer.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.WHITE)
+            glass_blur_layer.blur = ft.Blur(45, 45, ft.BlurTileMode.MIRROR) # Deep frost
             glass_blur_layer.border_radius = 20
-            glass_blur_layer.border = ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.WHITE))
+            glass_blur_layer.border = ft.Border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.WHITE))
             
             # App container styling
             main_layout_container.bgcolor = ft.Colors.TRANSPARENT
