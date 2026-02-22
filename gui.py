@@ -14,10 +14,143 @@ import shutil
 import processing_logic as logic
 import json
 from playsound import playsound
+import httpx
 import platform
 import urllib.parse
 
 APP_VERSION = "Dev Build"
+
+class UpdateManager:
+    """Handles background version checks, downloads, and applying updates."""
+    def __init__(self, page: ft.Page, current_version: str):
+        self.page = page
+        self.current_version = current_version
+        self.latest_release = None
+        self.update_available = False
+        self.download_path = None
+        self.repo = "hapatapa/videoutils"
+        self.is_downloading = False
+        self.download_progress = 0.0
+
+    async def check_for_updates(self):
+        # Don't check if we're in a dev build unless forced (optional)
+        if self.current_version == "Dev Build":
+            return False
+            
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+                response = await client.get(f"https://api.github.com/repos/{self.repo}/releases/latest")
+                if response.status_code == 200:
+                    data = response.json()
+                    latest_tag = data.get("tag_name", "").replace("v", "")
+                    
+                    # Simple semantic version comparison could be better, but string comparison
+                    # works if we always increment.
+                    if latest_tag and latest_tag != self.current_version:
+                        self.latest_release = data
+                        self.update_available = True
+                        return True
+        except Exception as e:
+            print(f"Update check failed: {e}")
+        return False
+
+    def get_asset_info(self):
+        if not self.latest_release: return None, None
+        assets = self.latest_release.get("assets", [])
+        sys_name = platform.system()
+        
+        target_name = ""
+        if sys_name == "Windows":
+            target_name = "VideoUtilities-Windows.exe"
+        elif sys_name == "Linux":
+            # Detect if we are running from a .run (self-extractor) or the Native (tar.gz) version
+            # Standalone builds (makeself) extract to /tmp by default.
+            exec_path = sys.executable
+            if exec_path.startswith("/tmp") or "/tmp/" in exec_path or "/.mount_" in exec_path:
+                target_name = "VideoUtilities-Linux.run"
+            else:
+                # If running from a home directory or /opt without being in /tmp, assume Native
+                target_name = "VideoUtilities-Linux-Native.tar.gz"
+            
+        for asset in assets:
+            if asset.get("name") == target_name:
+                return asset.get("browser_download_url"), asset.get("size")
+        return None, None
+
+    async def download_update(self, on_progress=None):
+        url, size = self.get_asset_info()
+        if not url: return False
+        
+        self.is_downloading = True
+        self.download_path = os.path.join(tempfile.gettempdir(), os.path.basename(url))
+        
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=None) as client:
+                async with client.stream("GET", url) as response:
+                    total_bytes = int(response.headers.get("Content-Length", size or 0))
+                    bytes_downloaded = 0
+                    
+                    with open(self.download_path, "wb") as f:
+                        async for chunk in response.aiter_bytes():
+                            f.write(chunk)
+                            bytes_downloaded += len(chunk)
+                            if total_bytes > 0:
+                                self.download_progress = bytes_downloaded / total_bytes
+                                if on_progress: on_progress(self.download_progress)
+            
+            self.is_downloading = False
+            return True
+        except Exception as e:
+            self.is_downloading = False
+            print(f"Download failed: {e}")
+            return False
+
+    def install_and_restart(self):
+        """Prepare system-specific replacement script and exit."""
+        if not self.download_path or not os.path.exists(self.download_path):
+            return
+            
+        current_exe = sys.executable
+        new_asset = self.download_path
+        sys_name = platform.system()
+        
+        # Handle formats that can't be auto-replaced easily (folders or temp-extracted .run files)
+        if sys_name == "Linux":
+            is_tar = new_asset.endswith(".tar.gz")
+            is_in_tmp = current_exe.startswith("/tmp") or "/tmp/" in current_exe or "/.mount_" in current_exe
+            
+            if is_tar or is_in_tmp:
+                # Open the folder where it was downloaded so the user can manually update
+                open_folder(new_asset)
+                # Don't exit yet, let the user close it after seeing the folder
+                return
+
+        if sys_name == "Windows":
+            # Create a batch file to handle replacement
+            batch_path = os.path.join(tempfile.gettempdir(), "update_vu.bat")
+            with open(batch_path, "w") as f:
+                f.write(f"@echo off\n")
+                f.write(f"timeout /t 2 /nobreak > nul\n")
+                f.write(f"del /f /q \"{current_exe}\"\n")
+                f.write(f"move /y \"{new_asset}\" \"{current_exe}\"\n")
+                f.write(f"start \"\" \"{current_exe}\"\n")
+                f.write(f"del \"%~f0\"\n")
+            subprocess.Popen(["cmd.exe", "/c", batch_path], creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NO_WINDOW)
+            sys.exit(0)
+            
+        elif sys_name == "Linux":
+            # Create a shell script to handle replacement
+            sh_path = os.path.join(tempfile.gettempdir(), "update_vu.sh")
+            with open(sh_path, "w") as f:
+                f.write(f"#!/bin/bash\n")
+                f.write(f"sleep 2\n")
+                f.write(f"mv -f \"{new_asset}\" \"{current_exe}\"\n")
+                f.write(f"chmod +x \"{current_exe}\"\n")
+                f.write(f"\"{current_exe}\" &\n")
+                f.write(f"rm \"$0\"\n")
+            os.chmod(sh_path, 0o755)
+            subprocess.Popen(["/bin/bash", sh_path])
+            sys.exit(0)
 
 # --- Settings Management ---
 if os.name == 'nt':
@@ -503,6 +636,66 @@ async def main(page: ft.Page):
     # State
     input_display_field = ft.Ref[ft.TextField]()
     output_display_field = ft.Ref[ft.TextField]()
+    
+    # Auto-Update State
+    update_badge = ft.Ref[ft.Container]()
+    update_text = ft.Ref[ft.Text]()
+    update_manager = UpdateManager(page, APP_VERSION)
+
+    async def on_update_click(e):
+        if update_manager.is_downloading: return
+        
+        # Change badge to "Downloading..."
+        if update_text.current:
+            update_text.current.value = "Updating: 0%"
+            update_text.current.update()
+        
+        def update_progress(pct):
+            if update_text.current:
+                update_text.current.value = f"Updating: {int(pct*100)}%"
+                update_text.current.update()
+        
+        # Multi-threading the download but awaiting it for the dialog
+        success = await update_manager.download_update(on_progress=update_progress)
+        
+        if success:
+            if update_text.current:
+                update_text.current.value = "Ready to Install"
+                update_text.current.update()
+            
+            # Check if we can auto-replace or if we need the user to do it (Linux tar/run cases)
+            current_exe = sys.executable
+            is_manual = False
+            if platform.system() == "Linux":
+                is_manual = update_manager.download_path.endswith(".tar.gz") or \
+                            current_exe.startswith("/tmp") or "/tmp/" in current_exe or "/.mount_" in current_exe
+
+            # Show a modal prompt
+            restart_modal = ft.AlertDialog(
+                title=ft.Text("Update Downloaded"),
+                content=ft.Column([
+                    ft.Text("The new version has been downloaded successfully."),
+                    ft.Text("Click below to open the folder and install manually." if is_manual else "Restart now to apply the update?", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                ], tight=True),
+                actions=[
+                    ft.TextButton("Later", on_click=lambda _: (setattr(restart_modal, "open", False), page.update())),
+                    ft.ElevatedButton(
+                        "Open Folder" if is_manual else "Restart Now", 
+                        on_click=lambda _: update_manager.install_and_restart(), 
+                        bgcolor=ft.Colors.PRIMARY, 
+                        color=ft.Colors.ON_PRIMARY
+                    ),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+            page.overlay.append(restart_modal)
+            restart_modal.open = True
+            page.update()
+        else:
+            if update_text.current:
+                update_text.current.value = "Download Failed"
+                update_text.current.update()
+            show_error("Failed to download the update. Please check your internet connection and try again.")
     target_size_slider = ft.Ref[ft.Slider]()
     target_size_input = ft.Ref[ft.TextField]()
     codec_dropdown = ft.Ref[ft.Dropdown]()
@@ -5406,6 +5599,19 @@ async def main(page: ft.Page):
                         ft.Image(src="Icon_Detail.png", width=12, height=12, color=ft.Colors.SURFACE_CONTAINER_LOW),
                     ], alignment=ft.Alignment.CENTER),
                     ft.Text("Video Utilities", size=11, weight=ft.FontWeight.W_600, color=ft.Colors.ON_SURFACE_VARIANT),
+                    ft.Container(
+                        ref=update_badge,
+                        content=ft.Row([
+                            ft.Icon(ft.Icons.AUTO_AWESOME_ROUNDED, size=12, color=ft.Colors.ON_PRIMARY),
+                            ft.Text(ref=update_text, value="Update Available", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_PRIMARY),
+                        ], spacing=4),
+                        padding=ft.padding.symmetric(horizontal=8, vertical=2),
+                        bgcolor=ft.Colors.PRIMARY,
+                        border_radius=10,
+                        visible=False,
+                        on_click=on_update_click,
+                        tooltip="A new update is available. Click to download and install."
+                    ),
                 ], spacing=10),
                 
                 # Right side: Control Buttons
@@ -5548,6 +5754,22 @@ async def main(page: ft.Page):
     # Start monitor task
     if hasattr(page, "run_task"):
         page.run_task(monitor_preview_loop)
+
+        # Background update check
+        async def run_update_check():
+            try:
+                if await update_manager.check_for_updates():
+                    if update_badge.current:
+                        update_badge.current.visible = True
+                        update_badge.current.update()
+            except Exception as e:
+                print(f"Update background task failed: {e}")
+
+        async def delayed_update_check():
+            await asyncio.sleep(5)  # Don't compete with startup load
+            await run_update_check()
+
+        page.run_task(delayed_update_check)
      
 def run_cli():
     """
