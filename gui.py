@@ -134,16 +134,26 @@ class UpdateManager:
                 return
 
         if sys_name == "Windows":
-            # Create a batch file to handle replacement
+            # Create a more robust batch file that retries deletion (handles AV locks)
             batch_path = os.path.join(tempfile.gettempdir(), "update_vu.bat")
             with open(batch_path, "w") as f:
                 f.write(f"@echo off\n")
                 f.write(f"timeout /t 2 /nobreak > nul\n")
+                f.write(f":retry_del\n")
                 f.write(f"del /f /q \"{current_exe}\"\n")
+                f.write(f"if exist \"{current_exe}\" (\n")
+                f.write(f"    timeout /t 1 /nobreak > nul\n")
+                f.write(f"    goto retry_del\n")
+                f.write(f")\n")
                 f.write(f"move /y \"{new_asset}\" \"{current_exe}\"\n")
                 f.write(f"start \"\" \"{current_exe}\"\n")
                 f.write(f"del \"%~f0\"\n")
-            subprocess.Popen(["cmd.exe", "/c", batch_path], creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NO_WINDOW)
+            
+            # Start the batch hidden
+            subprocess.Popen(
+                ["cmd.exe", "/c", batch_path], 
+                creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NO_WINDOW
+            )
             sys.exit(0)
             
         elif sys_name == "Linux":
