@@ -599,6 +599,107 @@
             }
         }
 
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(8px);
+            opacity: 0;
+            transition: opacity 0.3s cubic-bezier(0.2, 0.0, 0, 1.0);
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-container {
+            background-color: var(--md-sys-color-surface-container-high);
+            border-radius: var(--md-sys-radius-extra-large);
+            width: 90%;
+            max-width: 600px;
+            padding: 32px;
+            box-shadow: var(--md-sys-elevation-3);
+            transform: scale(0.8) translateY(20px);
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+            border: 1px solid var(--md-sys-color-outline-variant);
+        }
+
+        .modal-overlay.active .modal-container {
+            transform: scale(1) translateY(0);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .modal-close {
+            background: transparent;
+            border: none;
+            color: var(--md-sys-color-on-surface-variant);
+            cursor: pointer;
+            padding: 8px;
+            border-radius: var(--md-sys-radius-full);
+            transition: background-color 0.2s;
+        }
+
+        .modal-close:hover {
+            background-color: rgba(255, 255, 255, 0.08);
+        }
+
+        .modal-content {
+            margin-bottom: 32px;
+        }
+
+        .code-section {
+            background-color: var(--md-sys-color-surface-container-low);
+            padding: 16px;
+            border-radius: var(--md-sys-radius-medium);
+            margin-top: 12px;
+            position: relative;
+            border: 1px solid var(--md-sys-color-outline-variant);
+        }
+
+        .code-section pre {
+            margin: 0;
+            overflow-x: auto;
+            color: var(--md-sys-color-primary);
+            font-family: 'monospace';
+            font-size: 14px;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        /* Expressive touch */
+        .modal-container::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, var(--md-sys-color-primary), transparent, var(--md-sys-color-tertiary));
+            z-index: -1;
+            border-radius: calc(var(--md-sys-radius-extra-large) + 2px);
+            opacity: 0.3;
+        }
+
         /* CARD STYLES */
         .card {
             transition: all 0.2s;
@@ -908,6 +1009,10 @@
                                 <span class="material-symbols-rounded">folder_zip</span>
                                 Download Zip (.tar.gz)
                             </a>
+                            <button onclick="openNixModal()" class="btn btn-tonal label-large">
+                                <span class="material-symbols-rounded">auto_fix</span>
+                                Nix Flake
+                            </button>
                         </div>
                     </div>
 
@@ -954,8 +1059,56 @@
         </div>
     </footer>
 
+    <!-- Nix Modal -->
+    <div id="nix-modal" class="modal-overlay" onclick="if(event.target == this) closeNixModal()">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2 class="headline-medium">Nix Flake Installation</h2>
+                <button class="modal-close" onclick="closeNixModal()">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <div class="modal-content">
+                <p class="body-large">Run directly (no installation needed):</p>
+                <div class="code-section">
+                    <pre><code>nix run github:hapatapa/videoutils</code></pre>
+                </div>
+                <p class="body-large" style="margin-top: 24px;">Add to your <code>flake.nix</code> inputs:</p>
+                <div class="code-section">
+                    <pre><code>videoutils.url = "github:hapatapa/videoutils";</code></pre>
+                </div>
+                <p class="body-large" style="margin-top: 24px;">And add to your <code>environment.systemPackages</code>:</p>
+                <div class="code-section">
+                    <pre><code>videoutils.packages.${system}.default</code></pre>
+                </div>
+                <p class="body-large" style="margin-top: 24px;">Open a development shell:</p>
+                <div class="code-section">
+                    <pre><code>nix develop github:hapatapa/videoutils</code></pre>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-filled label-large" onclick="closeNixModal()">Got it</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
+        function openNixModal() {
+            const modal = document.getElementById('nix-modal');
+            modal.style.display = 'flex';
+            setTimeout(() => {
+                modal.classList.add('active');
+            }, 10);
+        }
+
+        function closeNixModal() {
+            const modal = document.getElementById('nix-modal');
+            modal.classList.remove('active');
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 300);
+        }
 
         // Reveal on scroll
         function reveal() {
