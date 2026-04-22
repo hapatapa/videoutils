@@ -2,7 +2,7 @@ name: Build Binaries
 
 on:
   push:
-    branches: [ "main", "experimental" ]
+    branches: [ "main" ]
     tags:
       - 'v*'
   workflow_dispatch:
