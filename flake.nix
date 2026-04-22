@@ -58,7 +58,6 @@
             };
             doCheck = false;
             nativeBuildInputs = [ python.pkgs.setuptools ];
-            # Remove flet from runtime deps check to avoid circular dep
             postPatch = ''
                sed -i '/"flet"/d' pyproject.toml
             '';
@@ -85,6 +84,7 @@
               websocket-client
               repath
               msgpack
+              flet-desktop-custom
             ];
             postPatch = ''
               # Fix invalid license in pyproject.toml that crashes setuptools
@@ -145,6 +145,16 @@ EOF
             ps.httpcore
             flet-desktop-custom
           ]);
+
+          desktopItem = pkgs.makeDesktopItem {
+            name = "videoutils";
+            exec = "videoutils";
+            icon = "videoutils";
+            desktopName = "Video Utilities";
+            genericName = "Video Processor";
+            categories = [ "AudioVideo" "Video" ];
+            comment = "Fast & Simple Video Processing";
+          };
         in
         {
           default = pkgs.stdenv.mkDerivation {
@@ -157,7 +167,12 @@ EOF
             installPhase = ''
               mkdir -p $out/bin
               mkdir -p $out/share/videoutils
+              mkdir -p $out/share/applications
+              mkdir -p $out/share/icons/hicolor/scalable/apps
+              
               cp -r . $out/share/videoutils
+              cp ${desktopItem}/share/applications/*.desktop $out/share/applications/
+              cp assets/Icon.svg $out/share/icons/hicolor/scalable/apps/videoutils.svg
               
               makeWrapper ${python-env}/bin/python3 $out/bin/videoutils \
                 --add-flags "$out/share/videoutils/main.py" \
