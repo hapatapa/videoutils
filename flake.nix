@@ -64,6 +64,7 @@
             };
             doCheck = false;
             nativeBuildInputs = [ python.pkgs.setuptools ];
+            # Remove flet from runtime deps check to avoid circular dep
             postPatch = ''
                sed -i '/"flet"/d' pyproject.toml
             '';
@@ -178,9 +179,16 @@ EOF
               
               cp -r . $out/share/videoutils
               
-              # Dynamic versioning from commit message via curl (requires network)
-              # Falls back to "unstable" if it fails
-              VERSION=$(curl -s -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/hapatapa/videoutils/commits/main | python3 -c "import sys, json, re; data = json.load(sys.stdin); msg = data['commit']['message'].split('\n')[0]; match = re.search(r'\(v?(\d+\.\d+\.\d+)\)\$', msg); print(match.group(1) if match else 'unstable')")
+              # Dynamic versioning from commit message (Requires network, falls back to "1.3.7-nix" in sandbox)
+              export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+              
+              # Attempt to fetch version, if fails (due to sandbox), use fallback
+              # We use a subshell to avoid crashing the whole phase
+              VERSION=$( (curl -s --connect-timeout 5 -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/hapatapa/videoutils/commits/main | python3 -c "import sys, json, re; data = json.load(sys.stdin); msg = data['commit']['message'].split('\n')[0]; match = re.search(r'\(v?(\d+\.\d+\.\d+)\)\$', msg); print(match.group(1) if match else '1.3.7-nix')") || echo "1.3.7-nix" )
+              
+              # Fallback if VERSION is empty for any reason
+              if [ -z "$VERSION" ]; then VERSION="1.3.7-nix"; fi
+              
               sed -i "s/APP_VERSION = \".*\"/APP_VERSION = \"$VERSION\"/" $out/share/videoutils/gui.py
               
               cp ${desktopItem}/share/applications/*.desktop $out/share/applications/

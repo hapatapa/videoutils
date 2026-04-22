@@ -450,17 +450,13 @@ async def main(page: ft.Page):
     
     # ALWAYS use transparent window background to support rounded corners
     # without black artifacts, even when 'transparent_app' is False.
-    try:
-        page.window_bgcolor = "transparent"
-        page.window.frameless = True
-        page.window.shadow = False
-    except:
-        page.window_bgcolor = "transparent"
-        page.window_frameless = True
-    
-    page.bgcolor = "transparent"
+    # For Flet 0.80.2, these properties are the most reliable.
+    page.window.bgcolor = ft.Colors.TRANSPARENT
+    page.window.frameless = True
     page.window.title_bar_hidden = True
     page.window.title_bar_buttons_hidden = True
+    
+    page.bgcolor = ft.Colors.TRANSPARENT
 
     page.window.min_width = 1143
     page.window.min_height = 841
@@ -5836,15 +5832,6 @@ async def main(page: ft.Page):
     
     def apply_transparency():
         if user_settings.get("transparent_app", False):
-            try:
-                page.window.bgcolor = ft.Colors.TRANSPARENT
-                page.window.frameless = True
-            except:
-                page.window_bgcolor = ft.Colors.TRANSPARENT
-                page.window_frameless = True
-            
-            page.bgcolor = ft.Colors.TRANSPARENT
-            
             # Get current accent for tint
             accent = page.theme.color_scheme_seed or ft.Colors.INDIGO_ACCENT
             
@@ -5876,15 +5863,8 @@ async def main(page: ft.Page):
                 title_bar.content.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.BLACK)
             except: pass
         else:
-            # When transparency is disabled, we still keep the window transparent
+            # When transparency is disabled, we keep the window transparent
             # but make the main container OPAQUE SURFACE with rounded corners.
-            try:
-                page.window.bgcolor = ft.Colors.TRANSPARENT
-            except:
-                page.window_bgcolor = ft.Colors.TRANSPARENT
-                
-            page.bgcolor = ft.Colors.TRANSPARENT
-
             tint_layer.visible = False
             glass_blur_layer.visible = True
             glass_blur_layer.blur = None
