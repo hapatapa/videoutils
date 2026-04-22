@@ -448,15 +448,11 @@ async def main(page: ft.Page):
     # Window Initialization
     is_windows = (sys.platform == "win32")
     
-    # ALWAYS use transparent window background to support rounded corners
-    # without black artifacts, even when 'transparent_app' is False.
-    # For Flet 0.80.2, these properties are the most reliable.
-    page.window.bgcolor = ft.Colors.TRANSPARENT
-    page.window.frameless = True
+    # Original initialization logic that kept the native title bar hidden
     page.window.title_bar_hidden = True
     page.window.title_bar_buttons_hidden = True
-    
-    page.bgcolor = ft.Colors.TRANSPARENT
+    if is_windows:
+        page.window.frameless = True
 
     page.window.min_width = 1143
     page.window.min_height = 841
