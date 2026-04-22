@@ -451,13 +451,14 @@ async def main(page: ft.Page):
     # ALWAYS use transparent window background to support rounded corners
     # without black artifacts, even when 'transparent_app' is False.
     try:
-        page.window.bgcolor = ft.Colors.TRANSPARENT
+        page.window_bgcolor = "transparent"
         page.window.frameless = True
+        page.window.shadow = False
     except:
-        page.window_bgcolor = ft.Colors.TRANSPARENT
+        page.window_bgcolor = "transparent"
         page.window_frameless = True
     
-    page.bgcolor = ft.Colors.TRANSPARENT
+    page.bgcolor = "transparent"
     page.window.title_bar_hidden = True
     page.window.title_bar_buttons_hidden = True
 
@@ -5816,7 +5817,7 @@ async def main(page: ft.Page):
         top=0, left=0, right=0, bottom=0,
         visible=False,
         content=main_ui_column,
-        clip_behavior=ft.ClipBehavior.HARD_EDGE
+        clip_behavior=ft.ClipBehavior.ANTI_ALIAS
     )
 
     main_layout_container = ft.Container(
@@ -5825,8 +5826,13 @@ async def main(page: ft.Page):
             glass_blur_layer
         ]),
         expand=True,
-        clip_behavior=ft.ClipBehavior.ANTI_ALIAS
+        clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+        margin=2
     )
+    
+    try:
+        page.window.shadow = False
+    except: pass
     
     def apply_transparency():
         if user_settings.get("transparent_app", False):

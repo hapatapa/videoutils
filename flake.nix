@@ -19,6 +19,7 @@
           pkgs = pkgsFor system;
           python = pkgs.python3;
           
+          # Comprehensive set of runtime libraries for Flet/Flutter/GTK transparency
           runtimeLibs = with pkgs; [
             gtk3
             glib
@@ -39,6 +40,11 @@
             libXinerama
             libXi
             libXrandr
+            libXrender
+            libXcomposite
+            libXdamage
+            libXext
+            libXfixes
             gst_all_1.gstreamer
             gst_all_1.gst-plugins-base
             gst_all_1.gst-plugins-good
@@ -159,10 +165,10 @@ EOF
         {
           default = pkgs.stdenv.mkDerivation {
             pname = "videoutils";
-            version = "1.0.0";
+            version = "unstable";
             src = ./.;
             
-            nativeBuildInputs = [ pkgs.makeWrapper ];
+            nativeBuildInputs = [ pkgs.makeWrapper pkgs.curl pkgs.cacert pkgs.python3 ];
             
             installPhase = ''
               mkdir -p $out/bin
@@ -171,6 +177,12 @@ EOF
               mkdir -p $out/share/icons/hicolor/scalable/apps
               
               cp -r . $out/share/videoutils
+              
+              # Dynamic versioning from commit message via curl (requires network)
+              # Falls back to "unstable" if it fails
+              VERSION=$(curl -s -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/hapatapa/videoutils/commits/main | python3 -c "import sys, json, re; data = json.load(sys.stdin); msg = data['commit']['message'].split('\n')[0]; match = re.search(r'\(v?(\d+\.\d+\.\d+)\)\$', msg); print(match.group(1) if match else 'unstable')")
+              sed -i "s/APP_VERSION = \".*\"/APP_VERSION = \"$VERSION\"/" $out/share/videoutils/gui.py
+              
               cp ${desktopItem}/share/applications/*.desktop $out/share/applications/
               cp assets/Icon.svg $out/share/icons/hicolor/scalable/apps/videoutils.svg
               
