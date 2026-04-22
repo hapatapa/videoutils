@@ -448,14 +448,13 @@ async def main(page: ft.Page):
     # Window Initialization
     is_windows = (sys.platform == "win32")
     
-    # ALWAYS use transparent window background and frameless to support custom titlebar
-    page.window.bgcolor = "transparent"
+    # ALWAYS use transparent window background to support rounded corners
+    # without black artifacts, even when 'transparent_app' is False.
+    # For Flet 0.80.2, these properties are the most reliable.
+    page.window.bgcolor = ft.Colors.TRANSPARENT
     page.window.frameless = True
-    page.window.title_bar_hidden = True
-    page.window.title_bar_buttons_hidden = True
-    page.window.shadow = False
     
-    page.bgcolor = "transparent"
+    page.bgcolor = ft.Colors.TRANSPARENT
 
     page.window.min_width = 1143
     page.window.min_height = 841
@@ -463,10 +462,6 @@ async def main(page: ft.Page):
     page.window.icon = "Icon.png"
     page.padding = 0
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-
-    # Force title bar hiding after UI load as an extra precaution
-    page.window.title_bar_hidden = True
-    page.window.title_bar_buttons_hidden = True
 
     # Transparency logic is handled in apply_transparency()
 
