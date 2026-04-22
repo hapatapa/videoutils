@@ -453,6 +453,8 @@ async def main(page: ft.Page):
     # For Flet 0.80.2, these properties are the most reliable.
     page.window.bgcolor = ft.Colors.TRANSPARENT
     page.window.frameless = True
+    page.window.title_bar_hidden = True
+    page.window.title_bar_buttons_hidden = True
     
     page.bgcolor = ft.Colors.TRANSPARENT
 
