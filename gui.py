@@ -199,7 +199,7 @@ DEFAULT_SETTINGS = {
     "follow_os_theme": True,
     "comic_sans_unlocked": False,
     "comic_sans_active": False,
-    "transparent_app": True,
+    "transparent_app": False,
     "custom_font_path": "",
     "custom_font_family": ""
 }
@@ -448,22 +448,18 @@ async def main(page: ft.Page):
     # Window Initialization
     is_windows = (sys.platform == "win32")
     
-    # Transparency logic is handled in apply_transparency()
-
-    if user_settings.get("transparent_app", False):
-        try:
-            page.window.bgcolor = "transparent"
-            page.window.frameless = True
-        except AttributeError:
-            page.window_bgcolor = "transparent"
-            page.window_frameless = True
-        page.bgcolor = "transparent"
-    else:
-        # Standard Opaque Initialization
-        page.window.title_bar_hidden = True
-        page.window.title_bar_buttons_hidden = True
-        if is_windows:
-            page.window.frameless = True
+    # ALWAYS use transparent window background to support rounded corners
+    # without black artifacts, even when 'transparent_app' is False.
+    try:
+        page.window.bgcolor = ft.Colors.TRANSPARENT
+        page.window.frameless = True
+    except:
+        page.window_bgcolor = ft.Colors.TRANSPARENT
+        page.window_frameless = True
+    
+    page.bgcolor = ft.Colors.TRANSPARENT
+    page.window.title_bar_hidden = True
+    page.window.title_bar_buttons_hidden = True
 
     page.window.min_width = 1143
     page.window.min_height = 841
@@ -5828,7 +5824,8 @@ async def main(page: ft.Page):
             tint_layer,
             glass_blur_layer
         ]),
-        expand=True
+        expand=True,
+        clip_behavior=ft.ClipBehavior.ANTI_ALIAS
     )
     
     def apply_transparency():
@@ -5873,20 +5870,28 @@ async def main(page: ft.Page):
                 title_bar.content.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.BLACK)
             except: pass
         else:
+            # When transparency is disabled, we still keep the window transparent
+            # but make the main container OPAQUE SURFACE with rounded corners.
             try:
-                page.window.bgcolor = ft.Colors.SURFACE
+                page.window.bgcolor = ft.Colors.TRANSPARENT
             except:
-                page.window_bgcolor = ft.Colors.SURFACE
+                page.window_bgcolor = ft.Colors.TRANSPARENT
                 
-            page.bgcolor = ft.Colors.SURFACE
+            page.bgcolor = ft.Colors.TRANSPARENT
+
             tint_layer.visible = False
             glass_blur_layer.visible = True
             glass_blur_layer.blur = None
             glass_blur_layer.bgcolor = None
             glass_blur_layer.border = None
             main_layout_container.bgcolor = ft.Colors.SURFACE
-            main_layout_container.border_radius = 0
-            main_layout_container.shadow = None
+            main_layout_container.border_radius = 20
+            main_layout_container.shadow = ft.BoxShadow(
+                spread_radius=1,
+                blur_radius=10,
+                color="black26",
+                offset=ft.Offset(0, 2),
+            )
             try:
                 title_bar.content.bgcolor = ft.Colors.SURFACE_CONTAINER_LOW
             except: pass
