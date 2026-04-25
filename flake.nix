@@ -1,9 +1,9 @@
 {
-  description = "Video Utilities - Fast & Simple Video Processing";
+  description = "Video Utilities - Fast & Simple Video Processing",
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-  };
+  },
 
   outputs = { self, nixpkgs }:
     let
@@ -179,15 +179,21 @@ EOF
               
               cp -r . $out/share/videoutils
               
-              # Dynamic versioning from commit message (Requires network, falls back to "1.3.7-nix" in sandbox)
+              # Dynamic versioning from commit message via curl
               export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
               
-              # Attempt to fetch version, if fails (due to sandbox), use fallback
-              # We use a subshell to avoid crashing the whole phase
-              VERSION=$( (curl -s --connect-timeout 5 -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/hapatapa/videoutils/commits/main | python3 -c "import sys, json, re; data = json.load(sys.stdin); msg = data['commit']['message'].split('\n')[0]; match = re.search(r'\(v?(\d+\.\d+\.\d+)\)\$', msg); print(match.group(1) if match else '1.3.7-nix')") || echo "1.3.7-nix" )
+              RESPONSE=$(curl -s -f -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/hapatapa/videoutils/commits/main)
+              if [ $? -ne 0 ]; then
+                echo "Error: Failed to fetch commit info from GitHub API." >&2
+                exit 1
+              fi
+
+              VERSION=$(echo "$RESPONSE" | python3 -c "import sys, json, re; data = json.load(sys.stdin); msg = data['commit']['message'].split('\n')[0]; match = re.search(r'\(v?(\d+\.\d+\.\d+)\)\$', msg); print(match.group(1) if match else '')")
               
-              # Fallback if VERSION is empty for any reason
-              if [ -z "$VERSION" ]; then VERSION="1.3.7-nix"; fi
+              if [ -z "$VERSION" ]; then
+                echo "Error: Could not extract version number from commit message: $(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['commit']['message'].split('\n')[0])")" >&2
+                exit 1
+              fi
               
               sed -i "s/APP_VERSION = \".*\"/APP_VERSION = \"$VERSION\"/" $out/share/videoutils/gui.py
               
@@ -207,7 +213,6 @@ EOF
       devShells = forAllSystems (system:
         let
           pkgs = pkgsFor system;
-          # Reuse the custom packages defined above
           customPkgs = self.packages.${system}.default;
         in
         {
