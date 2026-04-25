@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Update Version in Code
         run: |
-          # Remove 'v' prefix for the internal constant
+          # Strip 'v' and any potential 'v' prefix/suffix
           VERSION_NUM="${{ needs.get-version.outputs.tag }}"
           VERSION_NUM=${VERSION_NUM#v}
           sed -i "s/APP_VERSION = \".*\"/APP_VERSION = \"$VERSION_NUM\"/" gui.py
