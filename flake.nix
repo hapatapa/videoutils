@@ -179,8 +179,8 @@ EOF
               
               cp -r . $out/share/videoutils
               
-              # Read version from VERSION file if it exists, otherwise use "unstable"
-              VERSION=$(cat ./VERSION 2>/dev/null | tr -d '[:space:]' | sed 's/^v//' | sed 's/^/v/' || echo "unstable")
+              # Dynamic versioning: strip 'v' prefix if present
+              VERSION=$(cat ./VERSION 2>/dev/null | tr -d '[:space:]' | sed 's/^v//' || echo "unstable")
               
               sed -i "s/APP_VERSION = \".*\"/APP_VERSION = \"$VERSION\"/" $out/share/videoutils/gui.py
               
