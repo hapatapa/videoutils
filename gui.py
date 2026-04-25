@@ -5163,12 +5163,6 @@ async def main(page: ft.Page):
     setting_ding_switch = ft.Switch(value=user_settings.get("play_ding", True), on_change=lambda e: toggle_setting("play_ding", e), active_color=ft.Colors.PRIMARY)
     setting_gpu_switch = ft.Switch(value=user_settings.get("use_gpu", True), on_change=lambda e: toggle_setting("use_gpu", e), active_color=ft.Colors.PRIMARY)
     setting_os_theme_switch = ft.Switch(value=user_settings.get("follow_os_theme", False), on_change=lambda e: toggle_setting("follow_os_theme", e), active_color=ft.Colors.PRIMARY)
-    setting_transparent_switch = ft.Switch(
-        value=user_settings.get("transparent_app", False), 
-        on_change=lambda e: toggle_setting("transparent_app", e), 
-        active_color=ft.Colors.PRIMARY,
-        disabled=(sys.platform != "win32")
-    )
     
     custom_font_field = ft.TextField(
         value=user_settings.get("custom_font_path", ""),
@@ -5273,21 +5267,7 @@ async def main(page: ft.Page):
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
 
                             ft.Row([
-                                ft.Row([
-                                    ft.Icon(ft.Icons.OPACITY_ROUNDED, size=20),
-                                    ft.Column([
-                                        ft.Text("Transparent App", size=16, weight=ft.FontWeight.W_600),
-                                        ft.Text(
-                                            "Make the background transparent and blur it." if sys.platform == "win32" else "Unavailable on Linux until fix found", 
-                                            size=12, 
-                                            color=ft.Colors.ON_SURFACE_VARIANT
-                                        ),
-                                    ], spacing=0),
-                                ], spacing=15),
-                                setting_transparent_switch
-                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-
-                            ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+                                ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
                             
                             ft.Column([
                                ft.Row([
