@@ -5267,6 +5267,17 @@ async def main(page: ft.Page):
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
 
                             ft.Row([
+                                ft.Row([
+                                    ft.Icon(ft.Icons.DARK_MODE_ROUNDED, size=20),
+                                    ft.Column([
+                                        ft.Text("Dark Mode", size=16, weight=ft.FontWeight.W_600),
+                                        ft.Text("Switch application theme manually.", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                                    ], spacing=0),
+                                ], spacing=15),
+                                ft.Switch(ref=setting_theme_switch, value=(user_settings.get("theme_mode")=="dark"), on_change=toggle_theme, active_color=ft.Colors.PRIMARY, disabled=user_settings.get("follow_os_theme", False))
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+
+                            ft.Row([
                                 ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
                             ]),
                             
@@ -5285,18 +5296,6 @@ async def main(page: ft.Page):
                                ], spacing=10),
                                ft.Text("Restart the app if UI elements look misaligned after font change.", size=11, color=ft.Colors.ON_SURFACE_VARIANT, italic=True),
                             ], spacing=10),
-
-                            ft.Row([
-
-                                ft.Row([
-                                    ft.Icon(ft.Icons.DARK_MODE_ROUNDED, size=20),
-                                    ft.Column([
-                                        ft.Text("Dark Mode", size=16, weight=ft.FontWeight.W_600),
-                                        ft.Text("Switch application theme manually.", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-                                    ], spacing=0),
-                                ], spacing=15),
-                                ft.Switch(ref=setting_theme_switch, value=(user_settings.get("theme_mode")=="dark"), on_change=toggle_theme, active_color=ft.Colors.PRIMARY, disabled=user_settings.get("follow_os_theme", False))
-                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                             ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
                             ft.Text("Accent Color", size=14, weight=ft.FontWeight.W_600),
                             ft.Row([
