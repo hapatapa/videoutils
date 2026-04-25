@@ -169,7 +169,7 @@ EOF
             version = "unstable";
             src = ./.;
             
-            nativeBuildInputs = [ pkgs.makeWrapper pkgs.curl pkgs.cacert pkgs.python3 ];
+            nativeBuildInputs = [ pkgs.makeWrapper pkgs.python3 ];
             
             installPhase = ''
               mkdir -p $out/bin
@@ -179,21 +179,8 @@ EOF
               
               cp -r . $out/share/videoutils
               
-              # Dynamic versioning from commit message via curl
-              export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
-              
-              RESPONSE=$(curl -s -f -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/hapatapa/videoutils/commits/main)
-              if [ $? -ne 0 ]; then
-                echo "Error: Failed to fetch commit info from GitHub API." >&2
-                exit 1
-              fi
-
-              VERSION=$(echo "$RESPONSE" | python3 -c 'import sys, json, re; data = json.load(sys.stdin); msg = data["commit"]["message"].split("\n")[0]; match = re.search(r"\(v?(\d+\.\d+\.\d+)\)$", msg); print(match.group(1) if match else "")')
-              
-              if [ -z "$VERSION" ]; then
-                echo "Error: Could not extract version number from commit message: $(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['commit']['message'].split('\n')[0])")" >&2
-                exit 1
-              fi
+              # Read version from VERSION file if it exists, otherwise use "unstable"
+              VERSION=$(cat ./VERSION 2>/dev/null || echo "unstable")
               
               sed -i "s/APP_VERSION = \".*\"/APP_VERSION = \"$VERSION\"/" $out/share/videoutils/gui.py
               
