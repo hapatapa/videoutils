@@ -1,9 +1,9 @@
 {
-  description = "Video Utilities - Fast & Simple Video Processing",
+  description = "Video Utilities - Fast & Simple Video Processing";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-  },
+  };
 
   outputs = { self, nixpkgs }:
     let
