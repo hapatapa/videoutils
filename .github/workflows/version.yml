@@ -1,0 +1,24 @@
+name: Update Version
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract and Update Version
+        run: |
+          TAG=$(git log -1 --pretty=%B | grep -oP '\(v?\d+\.\d+\.\d+\)$' | tr -d '()' | sed 's/v//')
+          if [ -n "$TAG" ]; then
+            echo "$TAG" > VERSION
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add VERSION
+            git commit -m "chore: auto-update version to $TAG [skip ci]"
+            git push
+          fi
