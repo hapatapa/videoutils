@@ -5772,7 +5772,8 @@ async def main(page: ft.Page):
             except: pass
 
 
-    apply_transparency()
+    # Transparency logic removed for stability
+    # apply_transparency() 
 
     page.add(main_layout_container)
 
