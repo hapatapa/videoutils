@@ -5268,6 +5268,7 @@ async def main(page: ft.Page):
 
                             ft.Row([
                                 ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+                            ]),
                             
                             ft.Column([
                                ft.Row([
