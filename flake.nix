@@ -188,7 +188,7 @@ EOF
                 exit 1
               fi
 
-              VERSION=$(echo "$RESPONSE" | python3 -c "import sys, json, re; data = json.load(sys.stdin); msg = data['commit']['message'].split('\n')[0]; match = re.search(r'\(v?(\d+\.\d+\.\d+)\)\$', msg); print(match.group(1) if match else '')")
+              VERSION=$(echo "$RESPONSE" | python3 -c 'import sys, json, re; data = json.load(sys.stdin); msg = data["commit"]["message"].split("\n")[0]; match = re.search(r"\(v?(\d+\.\d+\.\d+)\)$", msg); print(match.group(1) if match else "")')
               
               if [ -z "$VERSION" ]; then
                 echo "Error: Could not extract version number from commit message: $(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['commit']['message'].split('\n')[0])")" >&2
