@@ -197,7 +197,6 @@ DEFAULT_SETTINGS = {
     "follow_os_theme": True,
     "comic_sans_unlocked": False,
     "comic_sans_active": False,
-    "transparent_app": True,
     "custom_font_path": "",
     "custom_font_family": ""
 }
@@ -446,24 +445,11 @@ async def main(page: ft.Page):
     # Window Initialization
     is_windows = (sys.platform == "win32")
     
-    # Force transparency disabled on non-Windows for now
-    if not is_windows:
-        user_settings["transparent_app"] = False
-
-    if user_settings.get("transparent_app", False):
-        try:
-            page.window.bgcolor = "transparent"
-            page.window.frameless = True
-        except AttributeError:
-            page.window_bgcolor = "transparent"
-            page.window_frameless = True
-        page.bgcolor = "transparent"
-    else:
-        # Standard Opaque Initialization
-        page.window.title_bar_hidden = True
-        page.window.title_bar_buttons_hidden = True
-        if is_windows:
-            page.window.frameless = True
+    # Original initialization logic that kept the native title bar hidden
+    page.window.title_bar_hidden = True
+    page.window.title_bar_buttons_hidden = True
+    if is_windows:
+        page.window.frameless = True
 
     page.window.min_width = 1143
     page.window.min_height = 841
@@ -5150,8 +5136,6 @@ async def main(page: ft.Page):
                     page.theme_mode = ft.ThemeMode.DARK if is_manual_dark else ft.ThemeMode.LIGHT
                     setting_theme_switch.current.value = is_manual_dark
                 setting_theme_switch.current.update()
-        elif key == "transparent_app":
-            apply_transparency()
         page.update()
 
     def set_accent_color(color_name):
