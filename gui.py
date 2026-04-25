@@ -46,7 +46,7 @@ class UpdateManager:
                     
                     # Simple semantic version comparison could be better, but string comparison
                     # works if we always increment.
-                    if latest_tag and latest_tag != self.current_version:
+                    if latest_tag and latest_tag != self.current_version.replace("v", ""):
                         self.latest_release = data
                         self.update_available = True
                         return True
