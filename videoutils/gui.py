@@ -1989,7 +1989,7 @@ async def main(page: ft.Page):
                 ft.Text("Target Size:", size=14),
                 ft.TextField(
                     ref=target_size_input, 
-                    value="10.0", 
+                    value="19.0", 
                     width=90, 
                     height=35, 
                     content_padding=5, 
@@ -2007,7 +2007,7 @@ async def main(page: ft.Page):
                 min=1, 
                 max=100, 
                 divisions=99, 
-                value=9, 
+                value=19, 
                 label="{value}",
                 on_change_end=on_slider_change_end,
                 active_color=ft.Colors.PRIMARY,
