@@ -11,31 +11,33 @@ def start_app():
     # CRITICAL: Required for PyInstaller/bundled apps using multiprocessing
     multiprocessing.freeze_support()
 
+    if "--cli" in sys.argv:
+        from videoutils.cli import run_cli
+        run_cli()
+        return
+
     # Delayed imports to avoid import-time side effects in sub-processes
     import flet as ft
     import flet_video
     import playsound
-    import gui
+    from videoutils import gui
 
-    if "--cli" in sys.argv:
-        gui.run_cli()
+    # Resolve Assets Path for Bundled/Standalone Executables
+    if hasattr(sys, "_MEIPASS"):
+        # PyInstaller/flet pack environment
+        assets_path = os.path.join(sys._MEIPASS, "assets")
     else:
-        # Resolve Assets Path for Bundled/Standalone Executables
-        if hasattr(sys, "_MEIPASS"):
-            # PyInstaller/flet pack environment
-            assets_path = os.path.join(sys._MEIPASS, "assets")
-        else:
-            # Development environment
-            assets_path = os.path.join(os.path.dirname(__file__), "assets")
-            
-        if not os.path.exists(assets_path):
-            assets_path = "assets" 
-            
-        # Official Flet Launch
-        ft.run(
-            gui.main,
-            assets_dir=assets_path
-        )
+        # Development environment
+        assets_path = os.path.join(os.path.dirname(__file__), "assets")
+
+    if not os.path.exists(assets_path):
+        assets_path = "assets"
+
+    # Official Flet Launch
+    ft.run(
+        gui.main,
+        assets_dir=assets_path
+    )
 
 
 

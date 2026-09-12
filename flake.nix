@@ -182,7 +182,7 @@ EOF
               # Dynamic versioning: strip 'v' prefix if present
               VERSION=$(cat ./VERSION 2>/dev/null | tr -d '[:space:]' | sed 's/^v//' || echo "unstable")
               
-              sed -i "s/APP_VERSION = \".*\"/APP_VERSION = \"$VERSION\"/" $out/share/videoutils/gui.py
+              sed -i "s/APP_VERSION = \".*\"/APP_VERSION = \"$VERSION\"/" $out/share/videoutils/videoutils/version.py
               
               cp ${desktopItem}/share/applications/*.desktop $out/share/applications/
               cp assets/Icon.svg $out/share/icons/hicolor/scalable/apps/videoutils.svg
