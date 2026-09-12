@@ -15,7 +15,6 @@ echo "🐧 Building LINUX binary..."
 # Use --noconfirm and separate dist/build paths to avoid "Not a directory" errors
 ./.venv/bin/python -m PyInstaller --onefile --windowed --noconfirm \
     --add-data "assets:assets" \
-    --add-data "compressor_logic.py:." \
     --name "ExpressiveVideoCompressor-Linux" \
     --distpath ./dist \
     --workpath ./build-work \
@@ -40,7 +39,7 @@ then
         # 2. Run the build
         echo "🔨 Compiling Windows executable..."
         if docker run --rm -v "$(pwd):/src" flet-windows-builder \
-            "--onefile --windowed --noconfirm --add-data 'assets;assets' --add-data 'compressor_logic.py;.' --add-data 'gui.py;.' --name 'ExpressiveVideoCompressor-Windows' --distpath ./dist --workpath ./build-work --collect-all flet --collect-all flet_video --noupx --clean main.py"
+            "--onefile --windowed --noconfirm --add-data 'assets;assets' --name 'ExpressiveVideoCompressor-Windows' --distpath ./dist --workpath ./build-work --collect-all flet --collect-all flet_video --noupx --clean main.py"
         then
             mkdir -p build
             mv ./dist/ExpressiveVideoCompressor-Windows.exe ./build/
